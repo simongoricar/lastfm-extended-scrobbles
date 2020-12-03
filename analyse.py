@@ -4,7 +4,7 @@ import time
 from os import path
 from json import load
 
-from tinytag import TinyTag
+from mutagen import File
 
 from core.configuration import config
 
@@ -44,15 +44,26 @@ t_start = time.time()
 cache_by_album = {}
 cache_by_albumartist = {}
 cache_by_title = {}
+cache_by_track_mbid = {}
 
 c = 0
 for audio_file in audio_files:
     # Load file metadata
-    tags = TinyTag.get(audio_file)
+    tags = File(audio_file, easy=True)
 
-    cache_by_album[tags.album] = tags
-    cache_by_albumartist[tags.albumartist] = tags
-    cache_by_title[tags.title] = tags
+    album = tags.get("album")
+    albumartist = tags.get("albumartist")
+    title = tags.get("title")
+    track_mbid = tags.get("musicbrainz_trackid")
+
+    if album is not None:
+        cache_by_album[album[0]] = tags
+    if albumartist is not None:
+        cache_by_albumartist[albumartist[0]] = tags
+    if title is not None:
+        cache_by_title[title[0]] = tags
+    if track_mbid is not None:
+        cache_by_track_mbid[track_mbid[0]] = tags
 
     # Log progress
     if c % 50 == 0:
@@ -79,3 +90,7 @@ scrobbles_len = len(scrobbles)
 t_total = round(time.time() - t_start, 1)
 log.info(f"Scrobbles file read and parsed in {t_total}s")
 log.info(f"{scrobbles_len} scrobbles loaded.")
+
+##
+# 3. Generate statistics
+##
