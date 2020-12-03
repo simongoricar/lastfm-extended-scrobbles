@@ -1,0 +1,5 @@
+.idea
+__pycache__
+
+data/*.json
+data/config.toml

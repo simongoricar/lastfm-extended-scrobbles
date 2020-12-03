@@ -1,0 +1,6 @@
+[Paths]
+# Can use {DATA_DIR} as a placeholder below
+scrobbles_json_path = ""
+# The root directory of your music library
+music_library_root = ""
+
