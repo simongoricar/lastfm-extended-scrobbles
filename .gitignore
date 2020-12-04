@@ -2,5 +2,6 @@
 __pycache__
 
 data/*.json
+data/output.xlsx
 data/config.toml
 data/cache

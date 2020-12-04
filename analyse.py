@@ -10,11 +10,11 @@ from openpyxl import Workbook
 from fuzzywuzzy.fuzz import ratio, token_sort_ratio
 from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
-from isodate import parse_duration
 
 from core.configuration import config
 from core.library import LibraryFile
 from core.scrobble import Scrobble
+from core.utilities import youtube_length_to_sec
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ def build_library_metadata_cache(file_list: List[str]):
                 by_album[lib_file.album_name].append(lib_file)
         if lib_file.artist_name is not None:
             if lib_file.artist_name not in by_artist:
-                by_album[lib_file.artist_name] = [lib_file]
+                by_artist[lib_file.artist_name] = [lib_file]
             else:
                 by_artist[lib_file.artist_name].append(lib_file)
         if lib_file.track_title is not None:
@@ -166,9 +166,9 @@ cache_by_track_title: Dict[str, List[LibraryFile]] = raw_cache["cache_by_track_t
 cache_by_track_mbid: Dict[str, LibraryFile] = raw_cache["cache_by_track_mbid"]
 
 # Now build some more cache
-cache_list_of_albums: List[str] = list(cache_by_album.keys())
-cache_list_of_artists: List[str] = list(cache_by_artist.keys())
-cache_list_of_track_titles: List[str] = list(cache_by_track_title.keys())
+cache_list_of_albums: List[str] = [str(a) for a in cache_by_album.keys()]
+cache_list_of_artists: List[str] = [str(a) for a in cache_by_artist.keys()]
+cache_list_of_track_titles: List[str] = [str(a) for a in cache_by_track_title.keys()]
 
 t_total = round(time.time() - t_start, 1)
 log.info(f"Local library cache took {t_total}s")
@@ -273,20 +273,26 @@ def find_on_youtube(raw_scrobble: Dict[str, Any], track_title: str, track_album:
     # Parse the closest one into a proper Scrobble
     index = search.titles.index(closest_match[0])
     duration_human = search.durations[index]
-    duration_sec = int(parse_duration(duration_human).total_seconds())
+    duration_sec = youtube_length_to_sec(duration_human)
 
     return Scrobble.from_youtube(raw_scrobble, duration_sec)
 
 
 # Go through every scrobble and append a row for each entry
-c = 0
-for scrobble in scrobbles:
-    s_track_mbid = scrobble.get("mbid")
+sheet.append(Scrobble.spreadsheet_header())
 
-    s_name = scrobble.get("name")
-    s_artist_raw = scrobble.get("artist")
+c_local_hits = 0
+c_youtube_hits = 0
+c_basic_info = 0
+
+c = 0
+for scrobble_raw in scrobbles:
+    s_track_mbid = scrobble_raw.get("mbid")
+
+    s_name = scrobble_raw.get("name")
+    s_artist_raw = scrobble_raw.get("artist")
     s_artist = None if s_artist_raw is None else s_artist_raw.get("#text")
-    s_album_raw = scrobble.get("album")
+    s_album_raw = scrobble_raw.get("album")
     s_album = None if s_album_raw is None else s_album_raw.get("#text")
 
     # Multiple modes of search:
@@ -297,11 +303,31 @@ for scrobble in scrobbles:
     # 1)
     if s_track_mbid:
         # Look up the track in cache via mbid
-        file = cache_by_track_mbid.get(s_track_mbid)
-        if not file:
-            # TODO use other methods, separate these into functions
-            pass
-    # TODO
+        scrobble = find_by_mbid(scrobble_raw, s_track_mbid)
+        if scrobble is not None:
+            c_local_hits += 1
+
+    elif s_name is not None:
+        scrobble = find_by_metadata(scrobble_raw, s_name, s_album, s_artist)
+
+        if scrobble is not None:
+            c_local_hits += 1
+    # TODO before falling back to musicbrainz, try to get the length on lastfm (web scraping?)
+    # TODO before falling back to youtube search, try to find the track on musicbrainz
+    else:
+        # Fall back to youtube search
+        scrobble = find_on_youtube(scrobble_raw, s_name, s_album, s_artist)
+
+        if scrobble is not None:
+            c_youtube_hits += 1
+
+    # If absolutely no match can be found, create a fallback scrobble with just the basic data
+    if scrobble is None:
+        scrobble = Scrobble.from_basic_data(scrobble_raw)
+        c_basic_info += 1
+
+    # Finally, dump this into the next spreadsheet row
+    sheet.append(scrobble.to_spreadsheet_list())
 
     # Log progress
     if c % config.PARSE_LOG_INTERVAL == 0:
@@ -314,3 +340,7 @@ xl_workbook.save(filename=config.XLSX_OUTPUT_PATH)
 
 t_total = round(time.time() - t_start, 1)
 log.info(f"Spreadsheet generated and saved in {t_total}s")
+log.info(f"Statistics:\n"
+         f"  Local library hits: {c_local_hits}\n"
+         f"  YouTube hits: {c_youtube_hits}\n"
+         f"  No matches: {c_basic_info}")
