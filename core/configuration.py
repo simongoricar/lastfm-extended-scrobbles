@@ -45,9 +45,10 @@ class TOMLConfig:
 
 class AnalysisConfig:
     __slots__ = (
-        "_config", "_table_source_paths", "_table_dest_paths", "_table_logging",
+        "_config", "_table_source_paths", "_table_dest_paths", "_table_cache", "_table_logging",
         "SCROBBLES_JSON_PATH", "MUSIC_LIBRARY_ROOT",
         "XLSX_OUTPUT_PATH",
+        "CACHE_DIR", "LIBRARY_CACHE_FILE",
         "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL"
     )
 
@@ -56,6 +57,7 @@ class AnalysisConfig:
 
         self._table_source_paths = self._config.get_table("SourcePaths")
         self._table_dest_paths = self._config.get_table("DestinationPaths")
+        self._table_cache = self._config.get_table("Cache")
         self._table_logging = self._config.get_table("Logging")
 
         ##########
@@ -70,10 +72,21 @@ class AnalysisConfig:
         ##########
         # DestinationPaths
         ##########
-        XLSX_OUTPUT_PATH = self._table_dest_paths.get("xlsx_ouput_path").format(
+        XLSX_OUTPUT_PATH = path.abspath(self._table_dest_paths.get("xlsx_ouput_path").format(
             DATA_DIR=DATA_DIR
-        )
+        ))
         self.XLSX_OUTPUT_PATH = XLSX_OUTPUT_PATH
+
+        ##########
+        # Cache
+        ##########
+        self.CACHE_DIR = path.abspath(self._table_cache.get("cache_dir").format(
+            DATA_DIR=DATA_DIR
+        ))
+        self.LIBRARY_CACHE_FILE = path.abspath(self._table_cache.get("library_cache_file").format(
+            DATA_DIR=DATA_DIR,
+            CACHE_DIR=self.CACHE_DIR
+        ))
 
         ##########
         # Logging

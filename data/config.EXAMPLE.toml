@@ -1,6 +1,23 @@
-[Paths]
-# Can use {DATA_DIR} as a placeholder below
+[SourcePaths]
+##
+# You need to fill out mainy just the values in this category, others are for customization.
+##
+# Can use {DATA_DIR} as a placeholder
 scrobbles_json_path = ""
 # The root directory of your music library
 music_library_root = ""
 
+[DestinationPaths]
+# Where to store the results
+xlsx_ouput_path = "{DATA_DIR}/output.xlsx"
+
+[Cache]
+# Can use {DATA_DIR}
+cache_dir = "{DATA_DIR}/cache"
+# For other values you can already use {CACHE_DIR}
+library_cache_file = "{CACHE_DIR}/library_cache.json"
+
+[Logging]
+# Unless you know what you are doing, you should probably leave the defaults
+cache_log_interval = 50
+parse_log_interval = 50

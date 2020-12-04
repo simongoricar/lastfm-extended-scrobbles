@@ -2,14 +2,15 @@ import logging
 import glob
 import time
 from os import path
-from json import load
-from typing import Optional, Dict, List
+from json import load, dump
+from typing import Optional, Dict, List, Any
 
 from mutagen import File, FileType
 from openpyxl import Workbook
 
 from core.configuration import config
-from core.track import Track
+from core.library import LibraryFile
+from core.scrobbledtrack import Scrobble
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 
 # 1.1) Collect audio files
 log.info("Collecting audio files.")
+
 
 def find_music_library_files(root_dir: str, extensions: tuple) -> List[str]:
     # Recursively build a list of audio files
@@ -32,6 +34,7 @@ def find_music_library_files(root_dir: str, extensions: tuple) -> List[str]:
     files.sort()
     return files
 
+
 audio_files = find_music_library_files(
     config.MUSIC_LIBRARY_ROOT,
     ("mp3", "ogg", "wav", "flac", "m4a")
@@ -43,54 +46,97 @@ audio_files = audio_files[0:150]
 
 log.info(f"Collected {audio_files_amount} audio files.")
 
-# 1.2) Build audio metadata cache
-log.info(f"Building metadata cache...")
+# 1.2) Build audio metadata cache if needed (otherwise just load the previous one)
 t_start = time.time()
-
-cache_by_album: Dict[Track] = {}
-cache_by_albumartist: Dict[Track] = {}
-cache_by_title: Dict[Track] = {}
-cache_by_track_mbid: Dict[Track] = {}
 
 
 def build_library_metadata_cache(file_list: List[str]):
+    by_album: Dict[str, LibraryFile] = {}
+    by_artist: Dict[str, LibraryFile] = {}
+    by_track_title: Dict[str, LibraryFile] = {}
+    by_track_mbid: Dict[str, LibraryFile] = {}
+
     counter = 0
 
     for audio_file in file_list:
         # Load file metadata
-        tags: Optional[FileType] = File(audio_file, easy=True)
+        mutagen_file: Optional[FileType] = File(audio_file, easy=True)
         # TODO use json objects instead of full FileType instances
         # ^ we can then save the cache and use it next run without going through the files
 
-        if not tags:
+        if not mutagen_file:
             raise Exception(f"Error while loading file: {audio_file}")
 
-        track: Track = Track.from_mutagen(tags)
+        lib_file: LibraryFile = LibraryFile.from_mutagen(mutagen_file)
 
-        album = tags.get("album")
-        albumartist = tags.get("albumartist")
-        title = tags.get("title")
-        track_mbid = tags.get("musicbrainz_trackid")
-
-        if album is not None:
-            cache_by_album[album[0]] = track
-        if albumartist is not None:
-            cache_by_albumartist[albumartist[0]] = track
-        if title is not None:
-            cache_by_title[title[0]] = tags
-        if track_mbid is not None:
-            cache_by_track_mbid[track_mbid[0]] = track
+        if lib_file.album_name is not None:
+            by_album[lib_file.album_name] = lib_file
+        if lib_file.artist_name is not None:
+            by_artist[lib_file.artist_name] = lib_file
+        if lib_file.track_title is not None:
+            by_track_title[lib_file.track_title] = lib_file
+        if lib_file.track_mbid is not None:
+            by_track_mbid[lib_file.track_mbid] = lib_file
 
         # Log progress
         if counter % config.CACHE_LOG_INTERVAL == 0:
             log.info(f"Caching progress: {counter} files")
         counter += 1
 
+    return {
+        "cache_by_album": by_album,
+        "cache_by_artist": by_artist,
+        "cache_by_track_title": by_track_title,
+        "cache_by_track_mbid": by_track_mbid,
+    }
 
-build_library_metadata_cache(audio_files)
+
+def load_library_metadata():
+    with open(config.LIBRARY_CACHE_FILE, "r", encoding="utf8") as lib_file:
+        return load(lib_file)
+
+
+def save_library_metadata(raw: Dict[str, Dict[str, Any]]):
+    def serialize_libraryfiles(full: Dict[str, LibraryFile]):
+        return {
+            k: v.dump() for k, v in full.items()
+        }
+
+    dumped = {
+        "cache_by_album": serialize_libraryfiles(raw["cache_by_album"]),
+        "cache_by_artist": serialize_libraryfiles(raw["cache_by_artist"]),
+        "cache_by_track_title": serialize_libraryfiles(raw["cache_by_track_title"]),
+        "cache_by_track_mbid": serialize_libraryfiles(raw["cache_by_track_mbid"]),
+    }
+
+    with open(config.LIBRARY_CACHE_FILE, "w", encoding="utf8") as lib_file:
+        dump(
+            dumped,
+            lib_file,
+            ensure_ascii=False,
+        )
+
+
+# If a cache already exists, load it
+# TODO switch to ignore cache? (deleting the cache file also works for now)
+if path.isfile(config.LIBRARY_CACHE_FILE):
+    log.info("Local library cache found, loading.")
+    raw_cache = load_library_metadata()
+    log.info("Local library cache loaded.")
+else:
+    log.info("Building local library cache...")
+    raw_cache = build_library_metadata_cache(audio_files)
+    save_library_metadata(raw_cache)
+
+# At this point, raw_cache has all the stuff we need
+# So we separate it into smaller chunks for later use
+cache_by_album: Dict[str, LibraryFile] = raw_cache["cache_by_album"]
+cache_by_artist: Dict[str, LibraryFile] = raw_cache["cache_by_artist"]
+cache_by_track_title: Dict[str, LibraryFile] = raw_cache["cache_by_track_title"]
+cache_by_track_mbid: Dict[str, LibraryFile] = raw_cache["cache_by_track_mbid"]
 
 t_total = round(time.time() - t_start, 1)
-log.info(f"Metadata cache built in {t_total}s")
+log.info(f"Local library cache took {t_total}s")
 
 ##
 # 2. Load scrobbles
@@ -103,7 +149,7 @@ def load_scrobbles(json_file_path: str) -> List:
     with open(json_file_path, "r", encoding="utf8") as scrobbles_file:
         scrobbles_raw = load(scrobbles_file)
 
-    # 2.1) Flatten json pages
+    # 2.1) Flatten scrobble pages
     flattened = [item for sublist in scrobbles_raw for item in sublist]
     return flattened
 
@@ -127,15 +173,15 @@ sheet = xl_workbook.create_sheet("Data")
 
 
 # Define search functions
-def find_by_mbid(track_mbid: str) -> Track:
+def find_by_mbid(track_mbid: str) -> Scrobble:
     pass
 
 
-def find_by_metadata(track_title: str, track_album: str, track_artist: str) -> Track:
+def find_by_metadata(track_title: str, track_album: str, track_artist: str) -> Scrobble:
     pass
 
 
-def find_on_youtube(track_title: str, track_album: str, track_artist: str) -> Track:
+def find_on_youtube(track_title: str, track_album: str, track_artist: str) -> Scrobble:
     pass
 
 
