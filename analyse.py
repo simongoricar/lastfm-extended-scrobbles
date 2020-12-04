@@ -190,6 +190,10 @@ def load_scrobbles(json_file_path: str) -> List:
 
 
 scrobbles = load_scrobbles(config.SCROBBLES_JSON_PATH)
+
+# DEBUGONLY
+scrobbles = scrobbles[300:800]
+
 scrobbles_len = len(scrobbles)
 
 t_total = round(time.time() - t_start, 1)
@@ -204,7 +208,8 @@ t_start = time.time()
 
 # Create an openpyxl workbook and the data sheet
 xl_workbook = Workbook()
-sheet = xl_workbook.create_sheet("Data")
+sheet = xl_workbook.active
+sheet.title = "Data"
 
 
 # Define search functions
@@ -254,10 +259,24 @@ def find_by_metadata(
     return None
 
 
-def find_on_youtube(raw_scrobble: Dict[str, Any], track_title: str, track_album: str, track_artist: str) -> Optional[Scrobble]:
+youtube_cache_by_query = {}
+
+
+def find_on_youtube(
+        raw_scrobble: Dict[str, Any],
+        track_title: str,
+        track_album: str,
+        track_artist: str
+) -> Optional[Scrobble]:
     # Search YouTube for the closest "artist title" match
     query = f"{track_artist} {track_title}"
-    search = SearchVideos(query, mode="list", max_results=6)
+
+    if query in youtube_cache_by_query:
+        log.debug("YouTube: using cached search")
+        search = youtube_cache_by_query[query]
+    else:
+        search = SearchVideos(query, mode="list", max_results=8)
+        youtube_cache_by_query[query] = search
 
     # Find the closest match
     closest_match = extractOne(
@@ -268,7 +287,10 @@ def find_on_youtube(raw_scrobble: Dict[str, Any], track_title: str, track_album:
     )
 
     if closest_match is None:
+        log.debug("YouTube: no hit")
         return None
+    else:
+        log.debug("YouTube: got a hit")
 
     # Parse the closest one into a proper Scrobble
     index = search.titles.index(closest_match[0])
@@ -299,23 +321,29 @@ for scrobble_raw in scrobbles:
     # 1) Use track MBID if possible
     # 2) If not possible, fall back to metadata
     # 3) Otherwise, use YouTube search
+    scrobble = None
 
     # 1)
     if s_track_mbid:
         # Look up the track in cache via mbid
+        log.debug("Trying track MBID search")
         scrobble = find_by_mbid(scrobble_raw, s_track_mbid)
         if scrobble is not None:
             c_local_hits += 1
 
-    elif s_name is not None:
+    # Try local metadata search
+    if scrobble is None and s_name is not None:
+        log.debug("Trying local file metadata search")
         scrobble = find_by_metadata(scrobble_raw, s_name, s_album, s_artist)
 
         if scrobble is not None:
             c_local_hits += 1
     # TODO before falling back to musicbrainz, try to get the length on lastfm (web scraping?)
     # TODO before falling back to youtube search, try to find the track on musicbrainz
-    else:
-        # Fall back to youtube search
+
+    # Fall back to youtube search
+    if scrobble is None:
+        log.debug("Trying YouTube search.")
         scrobble = find_on_youtube(scrobble_raw, s_name, s_album, s_artist)
 
         if scrobble is not None:
@@ -323,6 +351,7 @@ for scrobble_raw in scrobbles:
 
     # If absolutely no match can be found, create a fallback scrobble with just the basic data
     if scrobble is None:
+        log.debug("No match, using basic scrobble data.")
         scrobble = Scrobble.from_basic_data(scrobble_raw)
         c_basic_info += 1
 
@@ -330,13 +359,21 @@ for scrobble_raw in scrobbles:
     sheet.append(scrobble.to_spreadsheet_list())
 
     # Log progress
-    if c % config.PARSE_LOG_INTERVAL == 0:
-        log.info(f"Parsing progress: {c} scrobbles")
     c += 1
+    if c % config.PARSE_LOG_INTERVAL == 0:
+        log.info(f"Parsing progress: {c} scrobbles ({round(c / scrobbles_len * 100, 1)}%)")
 
 
 # Save the workbook to the configured path
-xl_workbook.save(filename=config.XLSX_OUTPUT_PATH)
+c = 0
+while c < 5:
+    try:
+        xl_workbook.save(filename=config.XLSX_OUTPUT_PATH)
+        break
+    except PermissionError:
+        log.warning("PermissionError while trying to open spreadsheet file, retrying in 5 seconds.")
+        time.sleep(5)
+        c += 1
 
 t_total = round(time.time() - t_start, 1)
 log.info(f"Spreadsheet generated and saved in {t_total}s")

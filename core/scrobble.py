@@ -76,7 +76,7 @@ class Scrobble:
             album_name = None
             album_mbid = None
 
-        track_title = raw_scrobble.get("title")
+        track_title = raw_scrobble.get("name")
         track_mbid = raw_scrobble.get("mbid")
 
         return {
@@ -105,7 +105,10 @@ class Scrobble:
             Scrobble instance constructed using scrobble data + local music slibrary.
         """
         date_raw = raw_scrobble.get("date")
-        scrobble_time = int(date_raw.get("uts"))
+        if date_raw is not None:
+            scrobble_time = int(date_raw.get("uts"))
+        else:
+            scrobble_time = None
 
         return cls(
             track_source=TrackSourceType.LOCAL_LIBRARY,
@@ -119,7 +122,7 @@ class Scrobble:
 
             track_title=track.track_title,
             track_mbid=track.track_mbid,
-            track_length=track.track_length,
+            track_length=round(track.track_length, 1),
         )
 
     @classmethod

@@ -30,6 +30,9 @@ class LibraryFile:
         self.track_title: Optional[str] = kwargs.get("track_title")
         self.track_mbid: Optional[str] = kwargs.get("track_mbid")
 
+    def __str__(self):
+        return f"<LibraryFile: {self.artist_name} - {self.album_name} - {self.track_title} ({self.track_length})>"
+
     @classmethod
     def from_mutagen(cls, file: FileType):
         artist_name = get_mutagen_attribute(file, "artist")
