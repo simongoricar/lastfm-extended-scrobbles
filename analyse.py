@@ -7,12 +7,14 @@ from typing import Optional, Dict, List, Any, Tuple
 
 from mutagen import File, FileType
 from openpyxl import Workbook
-from fuzzywuzzy.fuzz import ratio
+from fuzzywuzzy.fuzz import ratio, token_sort_ratio
 from fuzzywuzzy.process import extractOne
+from youtubesearchpython import SearchVideos
+from isodate import parse_duration
 
 from core.configuration import config
 from core.library import LibraryFile
-from core.scrobbledtrack import Scrobble
+from core.scrobble import Scrobble
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -252,8 +254,28 @@ def find_by_metadata(
     return None
 
 
-def find_on_youtube(track_title: str, track_album: str, track_artist: str) -> Optional[Scrobble]:
-    pass
+def find_on_youtube(raw_scrobble: Dict[str, Any], track_title: str, track_album: str, track_artist: str) -> Optional[Scrobble]:
+    # Search YouTube for the closest "artist title" match
+    query = f"{track_artist} {track_title}"
+    search = SearchVideos(query, mode="list", max_results=6)
+
+    # Find the closest match
+    closest_match = extractOne(
+        query,
+        search.titles,
+        scorer=token_sort_ratio,
+        score_cutoff=config.FUZZY_YOUTUBE_MIN_TITLE
+    )
+
+    if closest_match is None:
+        return None
+
+    # Parse the closest one into a proper Scrobble
+    index = search.titles.index(closest_match[0])
+    duration_human = search.durations[index]
+    duration_sec = int(parse_duration(duration_human).total_seconds())
+
+    return Scrobble.from_youtube(raw_scrobble, duration_sec)
 
 
 # Go through every scrobble and append a row for each entry

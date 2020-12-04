@@ -54,7 +54,7 @@ class AnalysisConfig:
         "XLSX_OUTPUT_PATH",
         "CACHE_DIR", "LIBRARY_CACHE_FILE",
         "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL",
-        "FUZZY_MIN_TITLE", "FUZZY_MIN_ALBUM", "FUZZY_MIN_ARTIST"
+        "FUZZY_MIN_TITLE", "FUZZY_MIN_ALBUM", "FUZZY_MIN_ARTIST", "FUZZY_YOUTUBE_MIN_TITLE"
     )
 
     def __init__(self, config_dict: TOMLConfig):
@@ -110,6 +110,7 @@ class AnalysisConfig:
         self.FUZZY_MIN_TITLE = int(self._table_fuzzy.get("local_library_title_min_match"))
         self.FUZZY_MIN_ALBUM = int(self._table_fuzzy.get("local_library_album_min_match"))
         self.FUZZY_MIN_ARTIST = int(self._table_fuzzy.get("local_library_artist_min_match"))
+        self.FUZZY_YOUTUBE_MIN_TITLE = int(self._table_fuzzy.get("youtube_title_min_match"))
 
 
 
