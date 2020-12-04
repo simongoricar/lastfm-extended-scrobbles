@@ -48,11 +48,13 @@ class TOMLConfig:
 
 class AnalysisConfig:
     __slots__ = (
-        "_config", "_table_source_paths", "_table_dest_paths", "_table_cache", "_table_logging",
+        "_config",
+        "_table_source_paths", "_table_dest_paths", "_table_cache", "_table_logging", "_table_fuzzy",
         "SCROBBLES_JSON_PATH", "MUSIC_LIBRARY_ROOT",
         "XLSX_OUTPUT_PATH",
         "CACHE_DIR", "LIBRARY_CACHE_FILE",
-        "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL"
+        "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL",
+        "FUZZY_MIN_TITLE", "FUZZY_MIN_ALBUM", "FUZZY_MIN_ARTIST"
     )
 
     def __init__(self, config_dict: TOMLConfig):
@@ -62,6 +64,7 @@ class AnalysisConfig:
         self._table_dest_paths = self._config.get_table("DestinationPaths")
         self._table_cache = self._config.get_table("Cache")
         self._table_logging = self._config.get_table("Logging")
+        self._table_fuzzy = self._config.get_table("FuzzyMatching")
 
         ##########
         # SourcePaths
@@ -100,6 +103,14 @@ class AnalysisConfig:
         ##########
         self.CACHE_LOG_INTERVAL = int(self._table_logging.get("cache_log_interval"))
         self.PARSE_LOG_INTERVAL = int(self._table_logging.get("parse_log_interval"))
+
+        ##########
+        # FuzzyMacthing
+        ##########
+        self.FUZZY_MIN_TITLE = int(self._table_fuzzy.get("local_library_title_min_match"))
+        self.FUZZY_MIN_ALBUM = int(self._table_fuzzy.get("local_library_album_min_match"))
+        self.FUZZY_MIN_ARTIST = int(self._table_fuzzy.get("local_library_artist_min_match"))
+
 
 
 raw_config = TOMLConfig.from_filename(CONFIG_FILE)

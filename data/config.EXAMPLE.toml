@@ -21,3 +21,7 @@ library_cache_file = "{CACHE_DIR}/library_cache.json"
 # Unless you know what you are doing, you should probably leave the defaults
 cache_log_interval = 50
 parse_log_interval = 50
+
+[FuzzyMatching]
+# Min Levenshtein Distance when matching by title, see the fuzzywuzzy package for more info
+local_library_title_min_match = 85

@@ -3,10 +3,12 @@ import glob
 import time
 from os import path
 from json import load, dump
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 
 from mutagen import File, FileType
 from openpyxl import Workbook
+from fuzzywuzzy.fuzz import ratio
+from fuzzywuzzy.process import extractOne
 
 from core.configuration import config
 from core.library import LibraryFile
@@ -156,10 +158,15 @@ else:
 
 # At this point, raw_cache has all the stuff we need
 # So we separate it into smaller chunks for later use
-cache_by_album: Dict[str, LibraryFile] = raw_cache["cache_by_album"]
-cache_by_artist: Dict[str, LibraryFile] = raw_cache["cache_by_artist"]
-cache_by_track_title: Dict[str, LibraryFile] = raw_cache["cache_by_track_title"]
+cache_by_album: Dict[str, List[LibraryFile]] = raw_cache["cache_by_album"]
+cache_by_artist: Dict[str, List[LibraryFile]] = raw_cache["cache_by_artist"]
+cache_by_track_title: Dict[str, List[LibraryFile]] = raw_cache["cache_by_track_title"]
 cache_by_track_mbid: Dict[str, LibraryFile] = raw_cache["cache_by_track_mbid"]
+
+# Now build some more cache
+cache_list_of_albums: List[str] = list(cache_by_album.keys())
+cache_list_of_artists: List[str] = list(cache_by_artist.keys())
+cache_list_of_track_titles: List[str] = list(cache_by_track_title.keys())
 
 t_total = round(time.time() - t_start, 1)
 log.info(f"Local library cache took {t_total}s")
@@ -214,7 +221,35 @@ def find_by_metadata(
 ) -> Optional[Scrobble]:
     # Find the best title, album and artist match in the local library cache
     # As a fallback, use the file name
-    pass
+
+    # Start by filtering by closest track name match
+    # Pick best with fuzzywuzzy
+
+    # TODO test this a bit, especially the score_cutoff value
+    best_match: Optional[Tuple[str, int]] = extractOne(
+        track_title,
+        cache_list_of_track_titles,
+        scorer=ratio,
+        score_cutoff=config.FUZZY_MIN_TITLE
+    )
+
+    if best_match is None:
+        return None
+
+    # If a match was found, try to match it with the correct artist and album
+    tracks: List[LibraryFile] = cache_by_track_title[best_match[0]]
+
+    for track in tracks:
+        artist_match = ratio(track_artist, track.artist_name)
+        album_match = ratio(track_album, track.album_name)
+
+        if artist_match >= config.FUZZY_MIN_ARTIST and album_match >= config.FUZZY_MIN_ALBUM:
+            # This match is good enough
+            return Scrobble.from_library_track(raw_scrobble, track)
+
+
+    # Returns None only if no sufficiently matching track could be found
+    return None
 
 
 def find_on_youtube(track_title: str, track_album: str, track_artist: str) -> Optional[Scrobble]:
