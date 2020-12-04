@@ -64,8 +64,16 @@ optional = false
 python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
 version = "0.10.2"
 
+[[package]]
+category = "main"
+description = "Search for YouTube videos WITHOUT YouTube Data API v3"
+name = "youtube-search-python"
+optional = false
+python-versions = ">=2.3,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*"
+version = "1.3.2"
+
 [metadata]
-content-hash = "e97f2f5330f6348705edb76fc50abd40de3b04b8e06a2e75830d9a22c82991af"
+content-hash = "2fe0eb5b1aa086294b8adfe513fd8208473df4d85a7e2f758ecd87f4c66b6b69"
 python-versions = "^3.8"
 
 [metadata.files]
@@ -94,4 +102,8 @@ python-levenshtein = [
 toml = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
     {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
+]
+youtube-search-python = [
+    {file = "youtube-search-python-1.3.2.tar.gz", hash = "sha256:7b78ff54a0ab4fe7403cc8a9004332a9f1262dc587cbf2b2d2a42e0bb50032a4"},
+    {file = "youtube_search_python-1.3.2-py3-none-any.whl", hash = "sha256:9e12141ce19e23d9d2d820d12604d687b9fa5e37056e4b90e165314749f8e65c"},
 ]

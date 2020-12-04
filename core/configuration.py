@@ -9,6 +9,7 @@ CONFIG_FILE_NAME = "config.toml"
 
 CONFIG_FILE = path.abspath(path.join(DATA_DIR, CONFIG_FILE_NAME))
 
+
 class TOMLConfig:
     __slots__ = ("data", )
 
@@ -44,23 +45,41 @@ class TOMLConfig:
 
 class AnalysisConfig:
     __slots__ = (
-        "_config", "_table_paths",
-        "SCROBBLES_JSON_PATH", "MUSIC_LIBRARY_ROOT"
+        "_config", "_table_source_paths", "_table_dest_paths", "_table_logging",
+        "SCROBBLES_JSON_PATH", "MUSIC_LIBRARY_ROOT",
+        "XLSX_OUTPUT_PATH",
+        "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL"
     )
 
     def __init__(self, config_dict: TOMLConfig):
         self._config = config_dict
 
-        self._table_paths = self._config.get_table("Paths")
+        self._table_source_paths = self._config.get_table("SourcePaths")
+        self._table_dest_paths = self._config.get_table("DestinationPaths")
+        self._table_logging = self._config.get_table("Logging")
 
         ##########
-        # Paths
+        # SourcePaths
         ##########
-        SCROBBLES_JSON = self._table_paths.get("scrobbles_json_path").format(
+        SCROBBLES_JSON = self._table_source_paths.get("scrobbles_json_path").format(
             DATA_DIR=DATA_DIR
         )
         self.SCROBBLES_JSON_PATH = path.abspath(SCROBBLES_JSON)
-        self.MUSIC_LIBRARY_ROOT = path.abspath(self._table_paths.get("music_library_root"))
+        self.MUSIC_LIBRARY_ROOT = path.abspath(self._table_source_paths.get("music_library_root"))
+
+        ##########
+        # DestinationPaths
+        ##########
+        XLSX_OUTPUT_PATH = self._table_dest_paths.get("xlsx_ouput_path").format(
+            DATA_DIR=DATA_DIR
+        )
+        self.XLSX_OUTPUT_PATH = XLSX_OUTPUT_PATH
+
+        ##########
+        # Logging
+        ##########
+        self.CACHE_LOG_INTERVAL = int(self._table_logging.get("cache_log_interval"))
+        self.PARSE_LOG_INTERVAL = int(self._table_logging.get("parse_log_interval"))
 
 
 raw_config = TOMLConfig.from_filename(CONFIG_FILE)
