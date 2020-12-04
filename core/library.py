@@ -21,14 +21,14 @@ class LibraryFile:
         self.file_path: str = kwargs.pop("file_path")
         self.track_length: Union[int, float] = kwargs.pop("track_length")
 
-        self.artist_name: str = kwargs.pop("artist_name", default=None)
-        self.artist_mbid: Optional[str] = kwargs.pop("artist_mbid", default=None)
+        self.artist_name: Optional[str] = kwargs.get("artist_name")
+        self.artist_mbid: Optional[str] = kwargs.get("artist_mbid")
 
-        self.album_name: str = kwargs.pop("album_name", default=None)
-        self.album_mbid: Optional[str] = kwargs.pop("album_mbid", default=None)
+        self.album_name: Optional[str] = kwargs.get("album_name")
+        self.album_mbid: Optional[str] = kwargs.get("album_mbid")
 
-        self.track_title: str = kwargs.pop("track_title", default=None)
-        self.track_mbid: Optional[str] = kwargs.pop("track_mbid", default=None)
+        self.track_title: Optional[str] = kwargs.get("track_title")
+        self.track_mbid: Optional[str] = kwargs.get("track_mbid")
 
     @classmethod
     def from_mutagen(cls, file: FileType):

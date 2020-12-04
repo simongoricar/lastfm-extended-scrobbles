@@ -1,8 +1,11 @@
-from os import path
+import logging
+from os import path, mkdir
 from toml import load
 from typing import Any
 
 from .exception import ConfigException
+
+log = logging.getLogger(__name__)
 
 DATA_DIR = "./data/"
 CONFIG_FILE_NAME = "config.toml"
@@ -83,6 +86,10 @@ class AnalysisConfig:
         self.CACHE_DIR = path.abspath(self._table_cache.get("cache_dir").format(
             DATA_DIR=DATA_DIR
         ))
+        if not path.isdir(self.CACHE_DIR):
+            log.info(f"Creating cache directory: '{self.CACHE_DIR}'")
+            mkdir(self.CACHE_DIR)
+
         self.LIBRARY_CACHE_FILE = path.abspath(self._table_cache.get("library_cache_file").format(
             DATA_DIR=DATA_DIR,
             CACHE_DIR=self.CACHE_DIR

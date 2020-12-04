@@ -41,9 +41,6 @@ audio_files = find_music_library_files(
 )
 audio_files_amount = len(audio_files)
 
-# DEBUGONLY
-audio_files = audio_files[0:150]
-
 log.info(f"Collected {audio_files_amount} audio files.")
 
 # 1.2) Build audio metadata cache if needed (otherwise just load the previous one)
@@ -51,9 +48,9 @@ t_start = time.time()
 
 
 def build_library_metadata_cache(file_list: List[str]):
-    by_album: Dict[str, LibraryFile] = {}
-    by_artist: Dict[str, LibraryFile] = {}
-    by_track_title: Dict[str, LibraryFile] = {}
+    by_album: Dict[str, List[LibraryFile]] = {}
+    by_artist: Dict[str, List[LibraryFile]] = {}
+    by_track_title: Dict[str, List[LibraryFile]] = {}
     by_track_mbid: Dict[str, LibraryFile] = {}
 
     counter = 0
@@ -61,20 +58,26 @@ def build_library_metadata_cache(file_list: List[str]):
     for audio_file in file_list:
         # Load file metadata
         mutagen_file: Optional[FileType] = File(audio_file, easy=True)
-        # TODO use json objects instead of full FileType instances
-        # ^ we can then save the cache and use it next run without going through the files
-
-        if not mutagen_file:
+        if mutagen_file is None:
             raise Exception(f"Error while loading file: {audio_file}")
 
         lib_file: LibraryFile = LibraryFile.from_mutagen(mutagen_file)
 
         if lib_file.album_name is not None:
-            by_album[lib_file.album_name] = lib_file
+            if lib_file.album_name not in by_album:
+                by_album[lib_file.album_name] = [lib_file]
+            else:
+                by_album[lib_file.album_name].append(lib_file)
         if lib_file.artist_name is not None:
-            by_artist[lib_file.artist_name] = lib_file
+            if lib_file.artist_name not in by_artist:
+                by_album[lib_file.artist_name] = [lib_file]
+            else:
+                by_artist[lib_file.artist_name].append(lib_file)
         if lib_file.track_title is not None:
-            by_track_title[lib_file.track_title] = lib_file
+            if lib_file.track_title not in by_track_title:
+                by_track_title[lib_file.track_title] = [lib_file]
+            else:
+                by_track_title[lib_file.track_title].append(lib_file)
         if lib_file.track_mbid is not None:
             by_track_mbid[lib_file.track_mbid] = lib_file
 
@@ -93,20 +96,43 @@ def build_library_metadata_cache(file_list: List[str]):
 
 def load_library_metadata():
     with open(config.LIBRARY_CACHE_FILE, "r", encoding="utf8") as lib_file:
-        return load(lib_file)
+        raw = load(lib_file)
+
+    # Convert back into LibraryFile instances
+    def instance_libraryfiles_from_list(full: Dict[str, List[Any]]) -> Dict[str, List[LibraryFile]]:
+        return {
+            k: [LibraryFile(**lib_f) for lib_f in v] for k, v in full.items()
+        }
+
+    def instance_libraryfiles_from_single(full: Dict[str, dict]) -> Dict[str, LibraryFile]:
+        return {
+            k: LibraryFile(**v) for k, v in full.items()
+        }
+
+    return {
+        "cache_by_album": instance_libraryfiles_from_list(raw["cache_by_album"]),
+        "cache_by_artist": instance_libraryfiles_from_list(raw["cache_by_artist"]),
+        "cache_by_track_title": instance_libraryfiles_from_list(raw["cache_by_track_title"]),
+        "cache_by_track_mbid": instance_libraryfiles_from_single(raw["cache_by_track_mbid"]),
+    }
 
 
 def save_library_metadata(raw: Dict[str, Dict[str, Any]]):
-    def serialize_libraryfiles(full: Dict[str, LibraryFile]):
+    def serialize_libraryfiles_list(full: Dict[str, List[LibraryFile]]):
+        return {
+            k: [lib_f.dump() for lib_f in v] for k, v in full.items()
+        }
+
+    def serialize_libraryfiles_single(full: Dict[str, LibraryFile]):
         return {
             k: v.dump() for k, v in full.items()
         }
 
     dumped = {
-        "cache_by_album": serialize_libraryfiles(raw["cache_by_album"]),
-        "cache_by_artist": serialize_libraryfiles(raw["cache_by_artist"]),
-        "cache_by_track_title": serialize_libraryfiles(raw["cache_by_track_title"]),
-        "cache_by_track_mbid": serialize_libraryfiles(raw["cache_by_track_mbid"]),
+        "cache_by_album": serialize_libraryfiles_list(raw["cache_by_album"]),
+        "cache_by_artist": serialize_libraryfiles_list(raw["cache_by_artist"]),
+        "cache_by_track_title": serialize_libraryfiles_list(raw["cache_by_track_title"]),
+        "cache_by_track_mbid": serialize_libraryfiles_single(raw["cache_by_track_mbid"]),
     }
 
     with open(config.LIBRARY_CACHE_FILE, "w", encoding="utf8") as lib_file:
@@ -162,7 +188,7 @@ log.info(f"Scrobbles file read and parsed in {t_total}s")
 log.info(f"{scrobbles_len} scrobbles loaded.")
 
 ##
-# 3. Generate statistics
+# 3. Generate data and dump it into a spreadsheet
 ##
 log.info("Generating extended data...")
 t_start = time.time()
@@ -173,15 +199,25 @@ sheet = xl_workbook.create_sheet("Data")
 
 
 # Define search functions
-def find_by_mbid(track_mbid: str) -> Scrobble:
+def find_by_mbid(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scrobble]:
+    library_track = cache_by_track_mbid.get(track_mbid)
+
+    if library_track is None:
+        return None
+    else:
+        return Scrobble.from_library_track(raw_scrobble, library_track)
+
+
+def find_by_metadata(
+        raw_scrobble: Dict[str, Any],
+        track_title: str, track_album: str, track_artist: str
+) -> Optional[Scrobble]:
+    # Find the best title, album and artist match in the local library cache
+    # As a fallback, use the file name
     pass
 
 
-def find_by_metadata(track_title: str, track_album: str, track_artist: str) -> Scrobble:
-    pass
-
-
-def find_on_youtube(track_title: str, track_album: str, track_artist: str) -> Scrobble:
+def find_on_youtube(track_title: str, track_album: str, track_artist: str) -> Optional[Scrobble]:
     pass
 
 

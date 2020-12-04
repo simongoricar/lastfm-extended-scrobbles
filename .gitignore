@@ -3,3 +3,4 @@ __pycache__
 
 data/*.json
 data/config.toml
+data/cache
