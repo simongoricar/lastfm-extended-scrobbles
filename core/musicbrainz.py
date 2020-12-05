@@ -1,6 +1,8 @@
 import requests as req
 from urllib.parse import urlencode
 
+from .configuration import PROJECT_NAME, VERSION, REPOSITORY
+
 BASE_MB_RELEASE_URL = "https://musicbrainz.org/ws/2/release"
 
 
@@ -8,6 +10,12 @@ class ReleaseTrack:
     __slots__ = (
         "track_title", "track_mbid", "track_length", "album_name", "album_mbid"
     )
+
+    GLOBAL_HEADERS = {
+        "fmt": "json",
+        # https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting
+        "User-Agent": f"{PROJECT_NAME}/{VERSION} ( {REPOSITORY} )",
+    }
 
     def __init__(self, **kwargs):
         # TODO rename album_name arguments to album_title for accuracy (see Scobble and LibraryFile as well)
@@ -23,7 +31,7 @@ class ReleaseTrack:
     def from_track_mbid(cls, track_mbid: str):
         # TODO cache this?
         params = {
-            "fmt": "json",
+            **cls.GLOBAL_HEADERS,
             "track": track_mbid
         }
 

@@ -9,7 +9,9 @@ log = logging.getLogger(__name__)
 
 DATA_DIR = "./data/"
 CONFIG_FILE_NAME = "config.toml"
+PYPROJECT_FILE_NAME = "pyproject.toml"
 
+PYPROJECT_FILE = path.abspath(PYPROJECT_FILE_NAME)
 CONFIG_FILE = path.abspath(path.join(DATA_DIR, CONFIG_FILE_NAME))
 
 
@@ -116,3 +118,11 @@ class AnalysisConfig:
 
 raw_config = TOMLConfig.from_filename(CONFIG_FILE)
 config = AnalysisConfig(raw_config)
+
+pyproject_config = TOMLConfig.from_filename(PYPROJECT_FILE)
+
+pyproject_tool_poetry = pyproject_config.get_table("tool").get_table("poetry")
+
+PROJECT_NAME = pyproject_tool_poetry.get("name")
+VERSION = pyproject_tool_poetry.get("version")
+REPOSITORY = pyproject_tool_poetry.get("repository")

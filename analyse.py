@@ -193,7 +193,8 @@ def load_scrobbles(json_file_path: str) -> List:
 scrobbles = load_scrobbles(config.SCROBBLES_JSON_PATH)
 
 # DEBUGONLY
-scrobbles = scrobbles[1000:2000]
+scrobbles = scrobbles[0:500]
+# scrobbles = scrobbles[4000:6000]
 
 scrobbles_len = len(scrobbles)
 
@@ -251,34 +252,54 @@ def find_by_metadata(
             return Scrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
     else:
         log.debug("find_by_metadata: cache miss")
-        # Start by filtering by closest track name match
-        # Pick best with fuzzywuzzy
-        best_match: Optional[Tuple[str, int]] = extractOne(
+        # Start by filtering to the closest artist name match
+        best_artist_match: Optional[Tuple[str, int]] = extractOne(
+            track_artist,
+            cache_list_of_artists,
+            scorer=ratio,
+            score_cutoff=config.FUZZY_MIN_ARTIST
+        )
+
+        # Edge case: if no match can be found, we should stop
+        if best_artist_match is None:
+            local_library_cache_by_metadata[caching_tuple] = None
+            return None
+
+        # Otherwise, build a list of LibraryFiles for further filtering
+        current_cache_list: List[LibraryFile] = cache_by_artist[best_artist_match[0]]
+
+        # Now filter by album if possible
+        if track_album not in (None, ""):
+            albums = set([a.album_name for a in current_cache_list])
+            best_album_match: Optional[Tuple[str, int]] = extractOne(
+                track_album,
+                albums,
+                scorer=ratio,
+                score_cutoff=config.FUZZY_MIN_ALBUM
+            )
+
+            # If a match is found, filter the list by this album
+            if best_album_match is not None:
+                current_cache_list = [a for a in current_cache_list if a.album_name == best_album_match[0]]
+
+        # Finally, choose the best track by title
+        c_to_track_titles = [a.track_title for a in current_cache_list]
+        best_track_match: Optional[Tuple[str, int]] = extractOne(
             track_title,
-            cache_list_of_track_titles,
+            c_to_track_titles,
             scorer=ratio,
             score_cutoff=config.FUZZY_MIN_TITLE
         )
 
-        if best_match is None:
+        # Edge case: no title match, exit here
+        if best_track_match is None:
+            local_library_cache_by_metadata[caching_tuple] = None
             return None
 
-        # If a match was found, try to match it with the correct artist and album
-        log.debug(f"find_by_metadata: got match with similarity {best_match[1]}")
-        tracks: List[LibraryFile] = cache_by_track_title[best_match[0]]
+        # Otherwise build a Scrobble with this information
+        final_track = current_cache_list[c_to_track_titles.index(best_track_match[0])]
 
-        for track in tracks:
-            artist_match = UWRatio(track_artist, track.artist_name)
-            album_match = UWRatio(track_album, track.album_name)
-
-            if artist_match >= config.FUZZY_MIN_ARTIST and album_match >= config.FUZZY_MIN_ALBUM:
-                # This match is good enough, save it into cache before returning the new Scrobble
-                local_library_cache_by_metadata[caching_tuple] = track
-                return Scrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
-
-        # Returns None only if no sufficiently matching track could be found
-        local_library_cache_by_metadata[caching_tuple] = None
-        return None
+        return Scrobble.from_library_track(raw_scrobble, final_track, TrackSourceType.LOCAL_LIBRARY_METADATA)
 
 
 def find_on_musicbrainz(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scrobble]:

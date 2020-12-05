@@ -1,7 +1,8 @@
 [tool.poetry]
-name = "lastfm-analyse"
+name = "lastfm-extended-stats"
 version = "0.1.0"
-description = ""
+description = "Generate extended stats from your Last.fm scrobbles using your local music library, MusicBrainz and YouTube."
+repository = "https://github.com/DefaultSimon/lastfm-extended-scrobbles"
 authors = ["Simon Goričar <simon.peter.goricar@gmail.com>"]
 
 [tool.poetry.dependencies]
