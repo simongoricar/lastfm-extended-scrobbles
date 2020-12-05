@@ -19,10 +19,11 @@ Before running the script, you need to have a json file with your [Last.fm](http
 This script currently supports the JSON output of [ghan.nl/scrobbles](https://mainstream.ghan.nl/scrobbles.html) and the improved version at [lastfm.ghan.nl/export](https://lastfm.ghan.nl/export/).
 
 *lastfm-extended-scrobbles* has multiple modes of search:
-- Local music library lookup via track MBID (extremely fast)
+- Local music library lookup via track MBID (extremely fast once indexed)
 - Local music library lookup via track metadata (still very fast)
 - MusicBrainz track MBID lookup (not too bad)
 - YouTube search (slowest, but also only as a fallback if everything else fails)
+- If everything above fails, an entry with just the scrobble data is created (but some columns are empty)
 
 If first one fails, the second method is tried, and so on.
 It is therefore recommended that you link your local music library with this script.
@@ -40,9 +41,22 @@ If the content of your music library changes (or its path does), you must delete
 
 If unexpected errors pop up during the analysis and they aren't caused by something like a configuration issue, please do fill out a GitHub Issue with details of your problems. 
 
+
+## 3. Extended Data
+This tool was made with the intent of calculating length for each listened track. 
+Track length is for now the main exended information this tool provides.
+
+**All columns:**
+- Track source `local music library / MusicBrainz / YouTube`
+- Scrobble time `unix epoch`
+- Artist name and MusicBrainz ID
+- Album title and MusicBrainz ID
+- Track title and MusicBrainz ID
+- Track length `in seconds, with one decimal place for local data`
+
 ---
 
 ###### A note on expected speed
 Speed of this script varies quite a bit. If most of your scrobbles are present in your local music library (let's say 90%), 
-a thousant scrobbles should take less than a minute. When the script has to reach out to MusicBrainz or YouTube, things start to slow down.
-
+a thousant scrobbles should take less than a minute. 
+When the script has to reach out to MusicBrainz or YouTube, things start to slow down as we are limited by their rate-limiting.
