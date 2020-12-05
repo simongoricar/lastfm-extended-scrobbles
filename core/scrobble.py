@@ -1,11 +1,14 @@
 from typing import Optional, Dict, Any
 
 from .library import LibraryFile
+from .musicbrainz import ReleaseTrack
 
 
 class TrackSourceType:
     JUST_SCROBBLE = "just_scrobble_data"
-    LOCAL_LIBRARY = "local_library"
+    LOCAL_LIBRARY_MBID = "local_library_mbid"
+    LOCAL_LIBRARY_METADATA = "local_library_metadata"
+    MUSICBRAINZ = "musicbrainz"
     YOUTUBE = "youtube"
 
 
@@ -91,15 +94,20 @@ class Scrobble:
 
 
     @classmethod
-    def from_library_track(cls, raw_scrobble: Dict[str, Any], track: LibraryFile):
+    def from_library_track(
+            cls, raw_scrobble: Dict[str, Any], track: LibraryFile,
+            track_source: str = TrackSourceType.LOCAL_LIBRARY_MBID
+    ):
         """
-        Use local library track and construct a Scrobble instance with the help of scrobble information.
+        Use local library track and construct a Scrobble instance with the help of normal scrobble data.
 
         Args:
             raw_scrobble:
                 Raw scrobble dict (one entry) as exported from last.fm.
             track:
                 LibraryFile track from the local library.
+            track_source:
+                TrackSourceType that represents the track source (local music library, MusicBrainz, YouTube, ...)
 
         Returns:
             Scrobble instance constructed using scrobble data + local music slibrary.
@@ -111,7 +119,7 @@ class Scrobble:
             scrobble_time = None
 
         return cls(
-            track_source=TrackSourceType.LOCAL_LIBRARY,
+            track_source=track_source,
             epoch_time=scrobble_time,
 
             artist_name=track.artist_name,
@@ -126,9 +134,39 @@ class Scrobble:
         )
 
     @classmethod
+    def from_musicbrainz_track(cls, raw_scrobble: Dict[str, Any], track: ReleaseTrack):
+        """
+        Use MusicBrainz track duration and construct a Scrobble with the help of normal scrobble data.
+        Args:
+            raw_scrobble:
+            track:
+
+        Returns:
+
+        """
+        scrobble_info = cls.parse_raw_scrobble(raw_scrobble)
+        # Use length from ReleaseTrack
+        track_length = track.track_length
+
+        return cls(
+            track_source=TrackSourceType.MUSICBRAINZ,
+            epoch_time=scrobble_info["time"],
+
+            artist_name=scrobble_info["artist_name"],
+            artist_mbid=scrobble_info["artist_mbid"],
+
+            album_name=scrobble_info["album_name"],
+            album_mbid=scrobble_info["album_mbid"],
+
+            track_title=scrobble_info["track_title"],
+            track_mbid=scrobble_info["track_mbid"],
+            track_length=track_length,
+        )
+
+    @classmethod
     def from_youtube(cls, raw_scrobble: Dict[str, Any], video_duration: int):
         """
-        Use YouTube video duration and construct a Scrobble with the help of scrobble information.
+        Use YouTube video duration and construct a Scrobble with the help of normal scrobble data.
 
         Args:
             raw_scrobble:
@@ -187,7 +225,9 @@ class Scrobble:
             track_length=None,
         )
 
+    ########################
     # Spreadsheet formatter
+    ########################
     @staticmethod
     def spreadsheet_header() -> list:
         """

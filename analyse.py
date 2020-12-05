@@ -13,8 +13,9 @@ from youtubesearchpython import SearchVideos
 
 from core.configuration import config
 from core.library import LibraryFile
-from core.scrobble import Scrobble
+from core.scrobble import Scrobble, TrackSourceType
 from core.utilities import youtube_length_to_sec
+from core.musicbrainz import ReleaseTrack
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -219,7 +220,7 @@ def find_by_mbid(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scro
     if library_track is None:
         return None
     else:
-        return Scrobble.from_library_track(raw_scrobble, library_track)
+        return Scrobble.from_library_track(raw_scrobble, library_track, TrackSourceType.LOCAL_LIBRARY_MBID)
 
 
 def find_by_metadata(
@@ -227,6 +228,7 @@ def find_by_metadata(
         track_title: str, track_album: str, track_artist: str
 ) -> Optional[Scrobble]:
     # Find the best title, album and artist match in the local library cache
+    # TODO this below
     # As a fallback, use the file name
 
     # Start by filtering by closest track name match
@@ -244,6 +246,7 @@ def find_by_metadata(
         return None
 
     # If a match was found, try to match it with the correct artist and album
+    log.debug(f"find_by_metadata: got match with similarity {best_match[1]}")
     tracks: List[LibraryFile] = cache_by_track_title[best_match[0]]
 
     for track in tracks:
@@ -252,13 +255,23 @@ def find_by_metadata(
 
         if artist_match >= config.FUZZY_MIN_ARTIST and album_match >= config.FUZZY_MIN_ALBUM:
             # This match is good enough
-            return Scrobble.from_library_track(raw_scrobble, track)
+            return Scrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
 
 
     # Returns None only if no sufficiently matching track could be found
     return None
 
 
+def find_on_musicbrainz(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scrobble]:
+    release_track = ReleaseTrack.from_track_mbid(track_mbid)
+    if release_track is None:
+        return None
+
+    log.debug(f"find_on_musicbrainz: got release track")
+    return Scrobble.from_musicbrainz_track(raw_scrobble, release_track)
+
+
+# TODO properly implement a cache for this
 youtube_cache_by_query = {}
 
 
@@ -303,7 +316,9 @@ def find_on_youtube(
 # Go through every scrobble and append a row for each entry
 sheet.append(Scrobble.spreadsheet_header())
 
-c_local_hits = 0
+c_local_mbid_hits = 0
+c_local_metadata_hits = 0
+c_musicbrainz_hits = 0
 c_youtube_hits = 0
 c_basic_info = 0
 
@@ -317,36 +332,43 @@ for scrobble_raw in scrobbles:
     s_album_raw = scrobble_raw.get("album")
     s_album = None if s_album_raw is None else s_album_raw.get("#text")
 
-    # Multiple modes of search:
-    # 1) Use track MBID if possible
-    # 2) If not possible, fall back to metadata
-    # 3) Otherwise, use YouTube search
+    # Multiple modes of search, first has highest priority:
+    # 1) Use track MBID (local library)
+    # 2) Use track metadata (local library)
+    # 3) Use track MBID (search on MusicBrainz)
+    # 3) Use track metadata (YouTube search)
     scrobble = None
 
-    # 1)
+    # Try local track mbid search
     if s_track_mbid:
         # Look up the track in cache via mbid
-        log.debug("Trying track MBID search")
         scrobble = find_by_mbid(scrobble_raw, s_track_mbid)
         if scrobble is not None:
-            c_local_hits += 1
+            log.debug(f"Match by MBID (local library): {s_artist} - {s_album} - {s_name} ({s_track_mbid})")
+            c_local_mbid_hits += 1
 
     # Try local metadata search
     if scrobble is None and s_name is not None:
-        log.debug("Trying local file metadata search")
         scrobble = find_by_metadata(scrobble_raw, s_name, s_album, s_artist)
 
         if scrobble is not None:
-            c_local_hits += 1
-    # TODO before falling back to musicbrainz, try to get the length on lastfm (web scraping?)
-    # TODO before falling back to youtube search, try to find the track on musicbrainz
+            log.debug(f"Match by metadata (local library): {s_artist} - {s_album} - {s_name} ({s_track_mbid})")
+            c_local_metadata_hits += 1
 
-    # Fall back to youtube search
+    # Try MusicBrainz
+    if scrobble is None and s_track_mbid is not None:
+        scrobble = find_on_musicbrainz(scrobble_raw, s_track_mbid)
+
+        if scrobble is not None:
+            log.debug(f"Match by MBID (MusicBrainz): {s_artist} - {s_album} - {s_name} ({s_track_mbid})")
+
+    # Try youtube search
     if scrobble is None:
         log.debug("Trying YouTube search.")
         scrobble = find_on_youtube(scrobble_raw, s_name, s_album, s_artist)
 
         if scrobble is not None:
+            log.debug(f"Match by metadata (YouTube): {s_artist} - {s_album} - {s_name}")
             c_youtube_hits += 1
 
     # If absolutely no match can be found, create a fallback scrobble with just the basic data
@@ -355,7 +377,7 @@ for scrobble_raw in scrobbles:
         scrobble = Scrobble.from_basic_data(scrobble_raw)
         c_basic_info += 1
 
-    # Finally, dump this into the next spreadsheet row
+    # Finally, dump this scrobble data into the next spreadsheet row
     sheet.append(scrobble.to_spreadsheet_list())
 
     # Log progress
@@ -377,7 +399,16 @@ while c < 5:
 
 t_total = round(time.time() - t_start, 1)
 log.info(f"Spreadsheet generated and saved in {t_total}s")
+
+perc_local_mbid_hits = round(c_local_mbid_hits / scrobbles_len * 100, 1)
+perc_local_metadata_hits = round(c_local_metadata_hits / scrobbles_len * 100, 1)
+perc_musicbrainz_hits = round(c_musicbrainz_hits / scrobbles_len * 100, 1)
+perc_youtube_hits = round(c_youtube_hits / scrobbles_len * 100, 1)
+perc_basic_info = round(c_basic_info / scrobbles_len * 100, 1)
+
 log.info(f"Statistics:\n"
-         f"  Local library hits: {c_local_hits}\n"
-         f"  YouTube hits: {c_youtube_hits}\n"
-         f"  No matches: {c_basic_info}")
+         f"  Local library (MBID): {c_local_mbid_hits} ({perc_local_mbid_hits}%)\n"
+         f"  Local library (metadata): {c_local_metadata_hits} ({perc_local_metadata_hits}%)\n"
+         f"  MusicBrainz: {c_musicbrainz_hits} ({perc_musicbrainz_hits}%)\n"
+         f"  YouTube: {c_youtube_hits} ({perc_youtube_hits}%)\n"
+         f"  No matches, just basic data: {c_basic_info} ({perc_basic_info}%)")
