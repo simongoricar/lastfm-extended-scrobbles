@@ -193,7 +193,7 @@ def load_scrobbles(json_file_path: str) -> List:
 scrobbles = load_scrobbles(config.SCROBBLES_JSON_PATH)
 
 # DEBUGONLY
-scrobbles = scrobbles[300:800]
+scrobbles = scrobbles[0:1000]
 
 scrobbles_len = len(scrobbles)
 
@@ -212,6 +212,14 @@ xl_workbook = Workbook()
 sheet = xl_workbook.active
 sheet.title = "Data"
 
+# Search caches
+# TODO implement a better cache than this
+
+# Dict[query, duration]
+youtube_cache_by_query: Dict[str, int] = {}
+# Dict[(title, album, artist), LibraryFile]
+local_library_cache_by_metadata: Dict[Tuple[str, str, str], Optional[LibraryFile]] = {}
+
 
 # Define search functions
 def find_by_mbid(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scrobble]:
@@ -228,38 +236,48 @@ def find_by_metadata(
         track_title: str, track_album: str, track_artist: str
 ) -> Optional[Scrobble]:
     # Find the best title, album and artist match in the local library cache
-    # TODO this below
-    # As a fallback, use the file name
+    # TODO use filename as fallback
 
-    # Start by filtering by closest track name match
-    # Pick best with fuzzywuzzy
+    # Use cached result if possible
+    caching_tuple = (track_title, track_album, track_artist)
+    if caching_tuple in local_library_cache_by_metadata:
+        log.debug("find_by_metadata: cache hit")
+        track: Optional[LibraryFile] = local_library_cache_by_metadata[caching_tuple]
 
-    # TODO test this a bit, especially the score_cutoff value
-    best_match: Optional[Tuple[str, int]] = extractOne(
-        track_title,
-        cache_list_of_track_titles,
-        scorer=ratio,
-        score_cutoff=config.FUZZY_MIN_TITLE
-    )
-
-    if best_match is None:
-        return None
-
-    # If a match was found, try to match it with the correct artist and album
-    log.debug(f"find_by_metadata: got match with similarity {best_match[1]}")
-    tracks: List[LibraryFile] = cache_by_track_title[best_match[0]]
-
-    for track in tracks:
-        artist_match = UWRatio(track_artist, track.artist_name)
-        album_match = UWRatio(track_album, track.album_name)
-
-        if artist_match >= config.FUZZY_MIN_ARTIST and album_match >= config.FUZZY_MIN_ALBUM:
-            # This match is good enough
+        if track is None:
+            return None
+        else:
             return Scrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
+    else:
+        log.debug("find_by_metadata: cache miss")
+        # Start by filtering by closest track name match
+        # Pick best with fuzzywuzzy
+        best_match: Optional[Tuple[str, int]] = extractOne(
+            track_title,
+            cache_list_of_track_titles,
+            scorer=ratio,
+            score_cutoff=config.FUZZY_MIN_TITLE
+        )
 
+        if best_match is None:
+            return None
 
-    # Returns None only if no sufficiently matching track could be found
-    return None
+        # If a match was found, try to match it with the correct artist and album
+        log.debug(f"find_by_metadata: got match with similarity {best_match[1]}")
+        tracks: List[LibraryFile] = cache_by_track_title[best_match[0]]
+
+        for track in tracks:
+            artist_match = UWRatio(track_artist, track.artist_name)
+            album_match = UWRatio(track_album, track.album_name)
+
+            if artist_match >= config.FUZZY_MIN_ARTIST and album_match >= config.FUZZY_MIN_ALBUM:
+                # This match is good enough, save it into cache before returning the new Scrobble
+                local_library_cache_by_metadata[caching_tuple] = track
+                return Scrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
+
+        # Returns None only if no sufficiently matching track could be found
+        local_library_cache_by_metadata[caching_tuple] = None
+        return None
 
 
 def find_on_musicbrainz(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scrobble]:
@@ -271,14 +289,9 @@ def find_on_musicbrainz(raw_scrobble: Dict[str, Any], track_mbid: str) -> Option
     return Scrobble.from_musicbrainz_track(raw_scrobble, release_track)
 
 
-# TODO properly implement a cache for this
-youtube_cache_by_query = {}
-
-
 def find_on_youtube(
         raw_scrobble: Dict[str, Any],
         track_title: str,
-        track_album: str,
         track_artist: str
 ) -> Optional[Scrobble]:
     # Search YouTube for the closest "artist title" match
@@ -286,29 +299,30 @@ def find_on_youtube(
 
     if query in youtube_cache_by_query:
         log.debug("YouTube: using cached search")
-        search = youtube_cache_by_query[query]
+        duration_sec = youtube_cache_by_query[query]
     else:
         search = SearchVideos(query, mode="list", max_results=8)
-        youtube_cache_by_query[query] = search
 
-    # Find the closest match
-    closest_match = extractOne(
-        query,
-        search.titles,
-        scorer=token_sort_ratio,
-        score_cutoff=config.FUZZY_YOUTUBE_MIN_TITLE
-    )
+        # Find the closest match
+        closest_match = extractOne(
+            query,
+            search.titles,
+            scorer=token_sort_ratio,
+            score_cutoff=config.FUZZY_YOUTUBE_MIN_TITLE
+        )
 
-    if closest_match is None:
-        log.debug("YouTube: no hit")
-        return None
-    else:
-        log.debug("YouTube: got a hit")
+        if closest_match is None:
+            log.debug("YouTube: no hit")
+            return None
+        else:
+            log.debug("YouTube: got a hit")
 
-    # Parse the closest one into a proper Scrobble
-    index = search.titles.index(closest_match[0])
-    duration_human = search.durations[index]
-    duration_sec = youtube_length_to_sec(duration_human)
+        # Parse the closest one into a proper Scrobble
+        index = search.titles.index(closest_match[0])
+        duration_human = search.durations[index]
+        duration_sec = youtube_length_to_sec(duration_human)
+
+        youtube_cache_by_query[query] = duration_sec
 
     return Scrobble.from_youtube(raw_scrobble, duration_sec)
 
@@ -365,10 +379,10 @@ for scrobble_raw in scrobbles:
     # Try youtube search
     if scrobble is None:
         log.debug("Trying YouTube search.")
-        scrobble = find_on_youtube(scrobble_raw, s_name, s_album, s_artist)
+        scrobble = find_on_youtube(scrobble_raw, s_name, s_artist)
 
         if scrobble is not None:
-            log.debug(f"Match by metadata (YouTube): {s_artist} - {s_album} - {s_name}")
+            log.debug(f"Match by metadata (YouTube): {s_artist} - {s_name}")
             c_youtube_hits += 1
 
     # If absolutely no match can be found, create a fallback scrobble with just the basic data
