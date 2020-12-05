@@ -21,7 +21,7 @@ def youtube_length_to_sec(human_time: str) -> int:
     except ValueError:
         return 0
 
-    total += int(separated[-1])
+    total += separated[-1]
 
     if len(separated) > 1:
         total += int(separated[-2]) * 60
