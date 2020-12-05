@@ -5,7 +5,7 @@ from os import path
 from json import load, dump
 from typing import Optional, Dict, List, Any, Tuple
 
-from mutagen import File, FileType
+from mutagen import File, FileType, MutagenError
 from openpyxl import Workbook
 from fuzzywuzzy.fuzz import ratio, partial_ratio
 from fuzzywuzzy.process import extractOne
@@ -58,13 +58,27 @@ def build_library_metadata_cache(file_list: List[str]):
     by_track_title: Dict[str, List[LibraryFile]] = {}
     by_track_mbid: Dict[str, LibraryFile] = {}
 
+    files_successful = 0
+    files_failed = 0
+
     counter = 0
 
     for audio_file in file_list:
         # Load file metadata
-        mutagen_file: Optional[FileType] = File(audio_file, easy=True)
+        try:
+            mutagen_file: Optional[FileType] = File(audio_file, easy=True)
+        except MutagenError:
+            # Failed to load the file, skip it
+            log.warning(f"Failed to load audio file: \"{audio_file}\"")
+            files_failed += 1
+            continue
+        else:
+            files_successful += 1
+
         if mutagen_file is None:
-            raise Exception(f"Error while loading file: {audio_file}")
+            log.warning(f"Audio file type could not be determined: \"{audio_file}\"")
+            files_failed += 1
+            continue
 
         lib_file: LibraryFile = LibraryFile.from_mutagen(mutagen_file)
 
