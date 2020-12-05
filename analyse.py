@@ -191,11 +191,6 @@ def load_scrobbles(json_file_path: str) -> List:
 
 
 scrobbles = load_scrobbles(config.SCROBBLES_JSON_PATH)
-
-# DEBUGONLY
-scrobbles = scrobbles[0:500]
-# scrobbles = scrobbles[4000:6000]
-
 scrobbles_len = len(scrobbles)
 
 t_total = round(time.time() - t_start, 1)
