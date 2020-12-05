@@ -8,7 +8,7 @@
 Generate extended stats from your Last.fm scrobbles using your local music library, MusicBrainz and YouTube.
 
 ## 1. Installation
-To run *lastfm-extended-scrobbles*, clone (or download) this repository to some directory.
+To run *lastfm-extended-scrobbles*, download the latest release or clone/download this repository to some directory.
 
 Then, if you have [Poetry](https://python-poetry.org/) installed, simply run `poetry install`. 
 Otherwise, install the dependencies from the generated `requirements.txt` file with `pip install -r requirements.txt`
