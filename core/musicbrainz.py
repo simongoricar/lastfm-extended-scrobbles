@@ -32,7 +32,7 @@ class ReleaseTrack:
         resp = req.get(full_url)
         data_raw = resp.json()
 
-        d_release_count = data_raw.get("release_count")
+        d_release_count = data_raw.get("release-count")
         if d_release_count is None or d_release_count < 1:
             return None
 
@@ -47,7 +47,7 @@ class ReleaseTrack:
                 track_mbid = track.get("id")
 
                 try:
-                    track_length = round(int(track.get("length")) / 100, 1)
+                    track_length = round(int(track.get("length")) / 1000, 1)
                 except TypeError:
                     track_length = None
 

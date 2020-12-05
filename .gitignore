@@ -3,5 +3,6 @@ __pycache__
 
 data/*.json
 data/output.xlsx
+data/~$*.xlsx
 data/config.toml
 data/cache

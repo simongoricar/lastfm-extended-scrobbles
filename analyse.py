@@ -7,7 +7,7 @@ from typing import Optional, Dict, List, Any, Tuple
 
 from mutagen import File, FileType
 from openpyxl import Workbook
-from fuzzywuzzy.fuzz import ratio, token_sort_ratio
+from fuzzywuzzy.fuzz import ratio, token_sort_ratio, UWRatio
 from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
 
@@ -250,8 +250,8 @@ def find_by_metadata(
     tracks: List[LibraryFile] = cache_by_track_title[best_match[0]]
 
     for track in tracks:
-        artist_match = ratio(track_artist, track.artist_name)
-        album_match = ratio(track_album, track.album_name)
+        artist_match = UWRatio(track_artist, track.artist_name)
+        album_match = UWRatio(track_album, track.album_name)
 
         if artist_match >= config.FUZZY_MIN_ARTIST and album_match >= config.FUZZY_MIN_ALBUM:
             # This match is good enough
@@ -356,7 +356,7 @@ for scrobble_raw in scrobbles:
             c_local_metadata_hits += 1
 
     # Try MusicBrainz
-    if scrobble is None and s_track_mbid is not None:
+    if scrobble is None and s_track_mbid not in (None, ""):
         scrobble = find_on_musicbrainz(scrobble_raw, s_track_mbid)
 
         if scrobble is not None:
