@@ -16,6 +16,11 @@ def youtube_length_to_sec(human_time: str) -> int:
     total = 0
     separated = human_time.split(":")
 
+    try:
+        separated = [int(a) for a in separated]
+    except ValueError:
+        return 0
+
     total += int(separated[-1])
 
     if len(separated) > 1:
