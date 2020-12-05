@@ -1,9 +1,16 @@
+import logging
 import requests as req
 from urllib.parse import urlencode
 
+from typing import Dict, Optional
+
 from .configuration import PROJECT_NAME, VERSION, REPOSITORY
 
+log = logging.getLogger(__name__)
+
 BASE_MB_RELEASE_URL = "https://musicbrainz.org/ws/2/release"
+
+track_mbid_to_releasetrack_cache: Dict[str, Optional["ReleaseTrack"]]
 
 
 class ReleaseTrack:
@@ -28,8 +35,14 @@ class ReleaseTrack:
         self.album_mbid = kwargs.pop("album_mbid")
 
     @classmethod
-    def from_track_mbid(cls, track_mbid: str):
-        # TODO cache this?
+    def from_track_mbid(cls, track_mbid: str, ignore_cache: bool = False):
+        if not ignore_cache and track_mbid in track_mbid_to_releasetrack_cache:
+            # Cache hit, return this one
+            log.debug("ReleaseTrack.from_track_mbid: cache hit")
+            return track_mbid_to_releasetrack_cache[track_mbid]
+
+        log.debug("ReleaseTrack.from_track_mbid: cache miss, requesting")
+
         params = {
             **cls.GLOBAL_HEADERS,
             "track": track_mbid
@@ -62,12 +75,17 @@ class ReleaseTrack:
                 album_name = d_release_first.get("title")
                 album_mbid = d_release_first.get("id")
 
-                return cls(
+                # Cache and return
+                instance = cls(
                     track_title=track_title,
                     track_mbid=track_mbid,
                     track_length=track_length,
                     album_name=album_name,
                     album_mbid=album_mbid,
                 )
+                track_mbid_to_releasetrack_cache[track_mbid] = instance
+                return instance
 
+        # Cache and return
+        track_mbid_to_releasetrack_cache[track_mbid] = None
         return None
