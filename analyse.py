@@ -314,10 +314,11 @@ def find_on_musicbrainz(raw_scrobble: Dict[str, Any], track_mbid: str) -> Option
 def find_on_youtube(
         raw_scrobble: Dict[str, Any],
         track_title: str,
+        track_album: str,
         track_artist: str
 ) -> Optional[Scrobble]:
     # Search YouTube for the closest "artist title" match
-    query = f"{track_artist} {track_title}"
+    query = f"{track_artist} {track_album} {track_title}"
 
     if query in youtube_cache_by_query:
         log.debug("YouTube: using cached search")
@@ -401,10 +402,10 @@ for scrobble_raw in scrobbles:
     # Try youtube search
     if scrobble is None:
         log.debug("Trying YouTube search.")
-        scrobble = find_on_youtube(scrobble_raw, s_name, s_artist)
+        scrobble = find_on_youtube(scrobble_raw, s_name, s_album, s_artist)
 
         if scrobble is not None:
-            log.debug(f"Match by metadata (YouTube): {s_artist} - {s_name}")
+            log.debug(f"Match by metadata (YouTube): {s_artist} - {s_album} - {s_name}")
             c_youtube_hits += 1
 
     # If absolutely no match can be found, create a fallback scrobble with just the basic data
