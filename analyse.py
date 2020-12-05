@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 ##
 
 # 1.1) Collect audio files
-log.info("Collecting audio files.")
+log.info("[STEP 1] Collecting audio files.")
 
 
 def find_music_library_files(root_dir: str, extensions: tuple) -> List[str]:
@@ -87,9 +87,9 @@ def build_library_metadata_cache(file_list: List[str]):
             by_track_mbid[lib_file.track_mbid] = lib_file
 
         # Log progress
+        counter += 1
         if counter % config.CACHE_LOG_INTERVAL == 0:
             log.info(f"Caching progress: {counter} files")
-        counter += 1
 
     return {
         "cache_by_album": by_album,
@@ -151,13 +151,16 @@ def save_library_metadata(raw: Dict[str, Dict[str, Any]]):
 # If a cache already exists, load it
 # TODO switch to ignore cache? (deleting the cache file also works for now)
 if path.isfile(config.LIBRARY_CACHE_FILE):
-    log.info("Local library cache found, loading.")
+    log.info("Local music library cache found, loading.")
     raw_cache = load_library_metadata()
-    log.info("Local library cache loaded.")
-else:
-    log.info("Building local library cache...")
+    log.info("Local music library cache loaded.")
+elif config.LIBRARY_CACHE_FILE != "":
+    log.info("Building local music library cache...")
     raw_cache = build_library_metadata_cache(audio_files)
     save_library_metadata(raw_cache)
+else:
+    raw_cache = {"cache_by_album": [], "cache_by_artist": [], "cache_by_track_title": [], "cache_by_track_mbid": []}
+    log.info("Local music library search is disabled.")
 
 # At this point, raw_cache has all the stuff we need
 # So we separate it into smaller chunks for later use
@@ -177,7 +180,7 @@ log.info(f"Local library cache took {t_total}s")
 ##
 # 2. Load scrobbles
 ##
-log.info("Loading scrobbles file...")
+log.info("[STEP 2] Loading scrobbles file...")
 t_start = time.time()
 
 
@@ -200,7 +203,7 @@ log.info(f"{scrobbles_len} scrobbles loaded.")
 ##
 # 3. Generate data and dump it into a spreadsheet
 ##
-log.info("Generating extended data...")
+log.info("[STEP 3] Generating extended data...")
 t_start = time.time()
 
 # Create an openpyxl workbook and the data sheet
@@ -345,14 +348,15 @@ def find_on_youtube(
     return Scrobble.from_youtube(raw_scrobble, duration_sec)
 
 
-# Go through every scrobble and append a row for each entry
+# Append the header
 sheet.append(Scrobble.spreadsheet_header())
 
+# Go through every scrobble and append a row for each entry
 c_local_mbid_hits = 0
 c_local_metadata_hits = 0
 c_musicbrainz_hits = 0
 c_youtube_hits = 0
-c_basic_info = 0
+c_basic_info_hits = 0
 
 c = 0
 for scrobble_raw in scrobbles:
@@ -407,7 +411,7 @@ for scrobble_raw in scrobbles:
     if scrobble is None:
         log.debug("No match, using basic scrobble data.")
         scrobble = Scrobble.from_basic_data(scrobble_raw)
-        c_basic_info += 1
+        c_basic_info_hits += 1
 
     # Finally, dump this scrobble data into the next spreadsheet row
     sheet.append(scrobble.to_spreadsheet_list())
@@ -431,16 +435,17 @@ while c < 5:
 
 t_total = round(time.time() - t_start, 1)
 log.info(f"Spreadsheet generated and saved in {t_total}s")
+log.info(f"Spreadsheet location: \"{config.XLSX_OUTPUT_PATH}\"")
 
 perc_local_mbid_hits = round(c_local_mbid_hits / scrobbles_len * 100, 1)
 perc_local_metadata_hits = round(c_local_metadata_hits / scrobbles_len * 100, 1)
 perc_musicbrainz_hits = round(c_musicbrainz_hits / scrobbles_len * 100, 1)
 perc_youtube_hits = round(c_youtube_hits / scrobbles_len * 100, 1)
-perc_basic_info = round(c_basic_info / scrobbles_len * 100, 1)
+perc_basic_info = round(c_basic_info_hits / scrobbles_len * 100, 1)
 
 log.info(f"Statistics:\n"
          f"  Local library (MBID): {c_local_mbid_hits} ({perc_local_mbid_hits}%)\n"
          f"  Local library (metadata): {c_local_metadata_hits} ({perc_local_metadata_hits}%)\n"
          f"  MusicBrainz: {c_musicbrainz_hits} ({perc_musicbrainz_hits}%)\n"
          f"  YouTube: {c_youtube_hits} ({perc_youtube_hits}%)\n"
-         f"  No matches, just basic data: {c_basic_info} ({perc_basic_info}%)")
+         f"  No matches, just basic data: {c_basic_info_hits} ({perc_basic_info}%)")
