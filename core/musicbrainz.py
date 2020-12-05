@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 BASE_MB_RELEASE_URL = "https://musicbrainz.org/ws/2/release"
 
-track_mbid_to_releasetrack_cache: Dict[str, Optional["ReleaseTrack"]]
+track_mbid_to_releasetrack_cache: Dict[str, Optional["ReleaseTrack"]] = {}
 
 
 class ReleaseTrack:

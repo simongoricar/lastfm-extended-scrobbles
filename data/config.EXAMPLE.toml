@@ -21,6 +21,14 @@ cache_dir = "{DATA_DIR}/cache"
 library_cache_file = "{CACHE_DIR}/library_cache.json"
 
 [Logging]
+# Verbosities (python's logging library):
+#  critical
+#  error
+#  warning
+#  info
+#  debug
+#  notset
+verbosity = "info"
 # Unless you know what you are doing, you should probably leave the defaults
 cache_log_interval = 50
 parse_log_interval = 50

@@ -14,6 +14,18 @@ PYPROJECT_FILE_NAME = "pyproject.toml"
 PYPROJECT_FILE = path.abspath(PYPROJECT_FILE_NAME)
 CONFIG_FILE = path.abspath(path.join(DATA_DIR, CONFIG_FILE_NAME))
 
+logging_name_to_level = {
+    # Adapted from __init__.py of logging library, L108
+    "critical": logging.CRITICAL,
+    "fatal": logging.FATAL,
+    "error": logging.ERROR,
+    "warn": logging.WARNING,
+    "warning": logging.WARNING,
+    "info": logging.INFO,
+    "debug": logging.DEBUG,
+    "notset": logging.NOTSET,
+}
+
 
 class TOMLConfig:
     __slots__ = ("data", )
@@ -55,7 +67,7 @@ class AnalysisConfig:
         "SCROBBLES_JSON_PATH", "MUSIC_LIBRARY_ROOT",
         "XLSX_OUTPUT_PATH",
         "CACHE_DIR", "LIBRARY_CACHE_FILE",
-        "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL",
+        "VERBOSITY", "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL",
         "FUZZY_MIN_TITLE", "FUZZY_MIN_ALBUM", "FUZZY_MIN_ARTIST", "FUZZY_YOUTUBE_MIN_TITLE"
     )
 
@@ -103,6 +115,12 @@ class AnalysisConfig:
         ##########
         # Logging
         ##########
+        verbosity = self._table_logging.get("verbosity", "").lower()
+        self.VERBOSITY = logging_name_to_level.get(verbosity)
+        if self.VERBOSITY is None:
+            log.warning("verbosity was not set properly, falling back to \"info\"")
+            self.VERBOSITY = logging.INFO
+
         self.CACHE_LOG_INTERVAL = int(self._table_logging.get("cache_log_interval"))
         self.PARSE_LOG_INTERVAL = int(self._table_logging.get("parse_log_interval"))
 

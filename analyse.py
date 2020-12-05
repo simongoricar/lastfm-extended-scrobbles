@@ -7,7 +7,7 @@ from typing import Optional, Dict, List, Any, Tuple
 
 from mutagen import File, FileType
 from openpyxl import Workbook
-from fuzzywuzzy.fuzz import ratio, partial_ratio, UWRatio
+from fuzzywuzzy.fuzz import ratio, partial_ratio
 from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
 
@@ -17,7 +17,7 @@ from core.scrobble import Scrobble, TrackSourceType
 from core.utilities import youtube_length_to_sec
 from core.musicbrainz import ReleaseTrack
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=config.VERBOSITY)
 log = logging.getLogger(__name__)
 
 ##
