@@ -1,9 +1,9 @@
+##
+# Fill out the settings below before running the script.
+##
 [SourcePaths]
-##
-# You need to fill out mainy just the values in this category, others are for customization.
-##
 # Can use {DATA_DIR} as a placeholder
-scrobbles_json_path = ""
+scrobbles_json_path = "{DATA_DIR}/my_scrobbles.json"
 # The root directory of your music library
 music_library_root = ""
 
@@ -11,6 +11,9 @@ music_library_root = ""
 # Where to store the results
 xlsx_ouput_path = "{DATA_DIR}/output.xlsx"
 
+##
+# Values below are configurable, but should be left alone in most cases.
+##
 [Cache]
 # Can use {DATA_DIR}
 cache_dir = "{DATA_DIR}/cache"
@@ -24,4 +27,9 @@ parse_log_interval = 50
 
 [FuzzyMatching]
 # Min Levenshtein Distance when matching by title, see the fuzzywuzzy package for more info
-local_library_title_min_match = 85
+local_library_title_min_match = 80
+# Two values below are used after the track title was matched, so they should be very high
+local_library_album_min_match = 92
+local_library_artist_min_match = 92
+
+youtube_title_min_match = 65

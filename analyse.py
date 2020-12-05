@@ -7,7 +7,7 @@ from typing import Optional, Dict, List, Any, Tuple
 
 from mutagen import File, FileType
 from openpyxl import Workbook
-from fuzzywuzzy.fuzz import ratio, token_sort_ratio, UWRatio
+from fuzzywuzzy.fuzz import ratio, partial_ratio, UWRatio
 from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
 
@@ -193,7 +193,7 @@ def load_scrobbles(json_file_path: str) -> List:
 scrobbles = load_scrobbles(config.SCROBBLES_JSON_PATH)
 
 # DEBUGONLY
-scrobbles = scrobbles[0:1000]
+scrobbles = scrobbles[1000:2000]
 
 scrobbles_len = len(scrobbles)
 
@@ -213,6 +213,7 @@ sheet = xl_workbook.active
 sheet.title = "Data"
 
 # Search caches
+# This cache really pays off if the tracks repeat (over a longer period of time for example)
 # TODO implement a better cache than this
 
 # Dict[query, duration]
@@ -307,7 +308,7 @@ def find_on_youtube(
         closest_match = extractOne(
             query,
             search.titles,
-            scorer=token_sort_ratio,
+            scorer=partial_ratio,
             score_cutoff=config.FUZZY_YOUTUBE_MIN_TITLE
         )
 
