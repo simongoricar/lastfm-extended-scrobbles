@@ -44,7 +44,7 @@ If unexpected errors pop up during the analysis and they aren't caused by someth
 
 ## 3. Extended Data
 This tool was made with the intent of calculating length for each listened track. 
-Track length is for now the main exended information this tool provides.
+Track length and genre are for now the main exended information this tool provides.
 
 **All columns:**
 - Track source `local music library / MusicBrainz / YouTube`
@@ -53,6 +53,7 @@ Track length is for now the main exended information this tool provides.
 - Album title and MusicBrainz ID
 - Track title and MusicBrainz ID
 - Track length `in seconds, with one decimal place for local data`
+- Genre `merged track/album/artist genres, sorted by weight`
 
 ---
 
