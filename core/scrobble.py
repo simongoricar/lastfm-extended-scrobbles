@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from .library import LibraryFile
 from .musicbrainz import ReleaseTrack
@@ -25,7 +25,8 @@ class Scrobble:
         "track_title",
         "track_mbid",
         "track_source",
-        "track_length"
+        "track_length",
+        "genre_list",
     )
 
     def __init__(self, **kwargs):
@@ -42,6 +43,8 @@ class Scrobble:
         self.track_mbid: Optional[str] = kwargs.get("track_mbid")
         # Unit: seconds
         self.track_length: Optional[int] = kwargs.get("track_length")
+
+        self.genre_list: Optional[List[str]] = kwargs.get("genre_list")
 
     @staticmethod
     def parse_raw_scrobble(raw_scrobble: Dict[str, Any]) -> Dict[str, Any]:
@@ -131,6 +134,7 @@ class Scrobble:
             track_title=track.track_title,
             track_mbid=track.track_mbid,
             track_length=round(track.track_length, 1),
+            genre_list=track.genre_list,
         )
 
     @classmethod
@@ -235,15 +239,16 @@ class Scrobble:
             The header for other spredsheet columns.
         """
         return [
-            "Track Source",
-            "Scrobble Time",
-            "Artist",
-            "Artist MBID",
-            "Album",
-            "Album MBID",
-            "Track",
-            "Track MBID",
-            "Track Length"
+            "track_source",
+            "scrobble_time",
+            "artist_name",
+            "artist_mbid",
+            "album_title",
+            "album_mbid",
+            "track_title",
+            "track_mbid",
+            "track_length",
+            "genres",
         ]
 
     def to_spreadsheet_list(self) -> list:
@@ -263,4 +268,5 @@ class Scrobble:
             self.track_title,
             self.track_mbid,
             self.track_length,
+            ", ".join(self.genre_list if self.genre_list is not None else [])
         ]

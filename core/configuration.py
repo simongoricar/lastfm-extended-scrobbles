@@ -63,22 +63,33 @@ class TOMLConfig:
 class AnalysisConfig:
     __slots__ = (
         "_config",
-        "_table_source_paths", "_table_dest_paths", "_table_cache", "_table_logging", "_table_fuzzy",
+        "_table_authentication", "_table_source_paths", "_table_dest_paths",
+        "_table_cache", "_table_logging", "_table_fuzzy", "_table_genres",
+        "LASTFM_API_KEY", "LASTFM_API_SECRET",
         "SCROBBLES_JSON_PATH", "MUSIC_LIBRARY_ROOT",
         "XLSX_OUTPUT_PATH",
         "CACHE_DIR", "LIBRARY_CACHE_FILE",
         "VERBOSITY", "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL",
-        "FUZZY_MIN_TITLE", "FUZZY_MIN_ALBUM", "FUZZY_MIN_ARTIST", "FUZZY_YOUTUBE_MIN_TITLE"
+        "FUZZY_MIN_TITLE", "FUZZY_MIN_ALBUM", "FUZZY_MIN_ARTIST", "FUZZY_YOUTUBE_MIN_TITLE",
+        "MIN_GENRE_WEIGHT", "GENRES_USE_SPECIFIC", "MAX_GENRE_COUNT", "MIN_LASTFM_SIMILARITY"
     )
 
     def __init__(self, config_dict: TOMLConfig):
         self._config = config_dict
 
+        self._table_authentication = self._config.get_table("Authentication")
         self._table_source_paths = self._config.get_table("SourcePaths")
         self._table_dest_paths = self._config.get_table("DestinationPaths")
         self._table_cache = self._config.get_table("Cache")
         self._table_logging = self._config.get_table("Logging")
         self._table_fuzzy = self._config.get_table("FuzzyMatching")
+        self._table_genres = self._config.get_table("Genres")
+
+        ##########
+        # Authentication
+        ##########
+        self.LASTFM_API_KEY = self._table_authentication.get("lastfm_api_key")
+        self.LASTFM_API_SECRET = self._table_authentication.get("lastfm_api_secret")
 
         ##########
         # SourcePaths
@@ -131,6 +142,15 @@ class AnalysisConfig:
         self.FUZZY_MIN_ALBUM = int(self._table_fuzzy.get("local_library_album_min_match"))
         self.FUZZY_MIN_ARTIST = int(self._table_fuzzy.get("local_library_artist_min_match"))
         self.FUZZY_YOUTUBE_MIN_TITLE = int(self._table_fuzzy.get("youtube_title_min_match"))
+
+        ##########
+        # Genres
+        ##########
+        self.MIN_GENRE_WEIGHT = int(self._table_genres.get("min_genre_weight"))
+        # self.GENRES_USE_SPECIFIC = self._table_genres.get("use_most_specific")
+        self.MAX_GENRE_COUNT = int(self._table_genres.get("max_genre_count"))
+        self.MIN_LASTFM_SIMILARITY = int(self._table_genres.get("min_lastfm_suggestion_similarity"))
+
 
 
 

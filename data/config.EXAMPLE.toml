@@ -1,6 +1,11 @@
 ##
 # Fill out the settings below before running the script.
 ##
+[Authentication]
+# Obtained from https://www.last.fm/api/account/create
+lastfm_api_key = ""
+lastfm_api_secret = ""
+
 [SourcePaths]
 # Can use {DATA_DIR} as a placeholder
 scrobbles_json_path = "{DATA_DIR}/my_scrobbles.json"
@@ -35,9 +40,21 @@ parse_log_interval = 50
 
 [FuzzyMatching]
 # Min Levenshtein Distance when matching by title, see the fuzzywuzzy package for more info
-local_library_title_min_match = 80
-# Two values below are used after the track title was matched, so they should be very high
+local_library_artist_min_match = 80
+# Two values below are used after the artist name was matched, so they should be very high
+local_library_title_min_match = 88
 local_library_album_min_match = 92
-local_library_artist_min_match = 92
 
 youtube_title_min_match = 65
+
+[Genres]
+# Ignore tags with Last.fm weight below this value
+min_genre_weight = 15
+
+# Uses the most specific genres of each subtree
+# use_most_specific = true
+
+# Output at most max_genre_count genres
+max_genre_count = 3
+# Throw away Last.fm corrections that are too distant from our search
+min_lastfm_suggestion_similarity = 88

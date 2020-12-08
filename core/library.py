@@ -3,6 +3,7 @@ from typing import Union, Optional
 from mutagen import FileType
 
 from .utilities import get_mutagen_attribute
+from .genres import full_genres_list
 
 
 class LibraryFile:
@@ -15,6 +16,7 @@ class LibraryFile:
         "album_mbid",
         "track_title",
         "track_mbid",
+        "genre_list",
     )
 
     def __init__(self, **kwargs):
@@ -30,6 +32,8 @@ class LibraryFile:
         self.track_title: Optional[str] = kwargs.get("track_title")
         self.track_mbid: Optional[str] = kwargs.get("track_mbid")
 
+        self.genre_list: Optional[str] = kwargs.get("genre_list")
+
     def __str__(self):
         return f"<LibraryFile: {self.artist_name} - {self.album_name} - {self.track_title} ({self.track_length})>"
 
@@ -44,6 +48,11 @@ class LibraryFile:
         track_title = get_mutagen_attribute(file, "title")
         track_mbid = get_mutagen_attribute(file, "musicbrainz_trackid")
 
+        genres_raw = get_mutagen_attribute(file, "genre")
+        genres = [
+            a.strip(" ").title() for a in genres_raw.split(",") if a.strip(" ").title() in full_genres_list
+        ] if genres_raw is not None else None
+
         return cls(
             file_path=file.filename,
             track_length=float(file.info.length),
@@ -53,6 +62,7 @@ class LibraryFile:
             album_mbid=album_mbid,
             track_title=track_title,
             track_mbid=track_mbid,
+            genre_list=genres,
         )
 
     def dump(self) -> dict:
@@ -65,4 +75,5 @@ class LibraryFile:
             "album_mbid": self.album_mbid,
             "track_title": self.track_title,
             "track_mbid": self.track_mbid,
+            "genre_list": self.genre_list,
         }

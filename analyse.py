@@ -16,6 +16,7 @@ from core.library import LibraryFile
 from core.scrobble import Scrobble, TrackSourceType
 from core.utilities import youtube_length_to_sec
 from core.musicbrainz import ReleaseTrack
+from core.genres import fetch_genre_by_mbid, fetch_genre_by_metatada
 
 logging.basicConfig(level=config.VERBOSITY)
 log = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ def build_library_metadata_cache(file_list: List[str]):
             files_failed += 1
             continue
 
+        # TODO extract genre from file if possible, this will be a significant speedup
         lib_file: LibraryFile = LibraryFile.from_mutagen(mutagen_file)
 
         if lib_file.album_name is not None:
@@ -378,10 +380,15 @@ for scrobble_raw in scrobbles:
 
     s_name = scrobble_raw.get("name")
     s_artist_raw = scrobble_raw.get("artist")
+    s_artist_mbid = None if s_artist_raw is None else s_artist_raw.get("mbid")
     s_artist = None if s_artist_raw is None else s_artist_raw.get("#text")
     s_album_raw = scrobble_raw.get("album")
+    a_album_mbid = None if s_album_raw is None else s_album_raw.get("mbid")
     s_album = None if s_album_raw is None else s_album_raw.get("#text")
 
+    #########
+    # STEP 1: Find source
+    #########
     # Multiple modes of search, first has highest priority:
     # 1) Use track MBID (local library)
     # 2) Use track metadata (local library)
@@ -426,6 +433,26 @@ for scrobble_raw in scrobbles:
         log.debug("No match, using basic scrobble data.")
         scrobble = Scrobble.from_basic_data(scrobble_raw)
         c_basic_info_hits += 1
+
+    #########
+    # STEP 1: Find genre if needed
+    #########
+    if scrobble.genre_list is None:
+        log.debug("Fetching Last.fm genres.")
+
+        # if "" not in (s_track_mbid, a_album_mbid, s_artist_mbid):
+        #     genres: List[str] = fetch_genre_by_mbid(
+        #         s_track_mbid,
+        #         a_album_mbid,
+        #         s_artist_mbid,
+        #     )
+        # else:
+        genres: List[str] = fetch_genre_by_metatada(
+            scrobble.track_title,
+            scrobble.album_name,
+            scrobble.artist_name,
+        )
+        scrobble.genre_list = genres
 
     # Finally, dump this scrobble data into the next spreadsheet row
     sheet.append(scrobble.to_spreadsheet_list())
