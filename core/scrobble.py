@@ -55,7 +55,7 @@ class RawScrobble:
 
         s_track_mbid: str = data.get("mbid")
         s_track_title: str = data.get("name")
-        s_track_love: bool = True if data.get("loved") == 1 else False
+        s_track_love: bool = True if int(data.get("loved")) == 1 else False
 
         scrobble_time: Optional[int]
         if s_date_raw:
