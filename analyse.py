@@ -209,6 +209,7 @@ def load_scrobbles(json_file_path: str) -> List:
     return flattened
 
 
+# TODO option to filter scrobbles by date (from, to)
 scrobbles = load_scrobbles(config.SCROBBLES_JSON_PATH)
 scrobbles_len = len(scrobbles)
 

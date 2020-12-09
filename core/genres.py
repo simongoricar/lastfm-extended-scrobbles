@@ -2,7 +2,7 @@ import requests
 import os
 import logging
 import pylast as pyl
-from typing import List, Tuple, Optional, Dict, Union, Set
+from typing import List, Tuple, Optional, Dict, Union, Set, Generator
 from yaml import safe_load
 
 from fuzzywuzzy.fuzz import UWRatio
@@ -39,6 +39,7 @@ lastfm.enable_rate_limit()
 
 
 class Genre:
+    # DEPRECATED the genre tree is unused
     __slots__ = ("name", "parent_genre", "is_leaf", "tree_depth")
 
     def __init__(self, genre_name: str, parent_genre: "Genre", is_leaf: bool, tree_depth: int):
@@ -71,6 +72,9 @@ class Genre:
 
 
 def download_genre_data() -> None:
+    """
+    Downloads the genre data from beets' GitHub repository. Saves into the configurable cache directory.
+    """
     log.info("Downloading genre data...")
 
     log.debug(f"Downloading genre list from {BEETS_GENRES_LIST_SRC}")
@@ -79,6 +83,7 @@ def download_genre_data() -> None:
         for chunk in resp_list.iter_content(chunk_size=256):
             genre_list_f.write(chunk)
 
+    # DEPRECATED the genre tree is unused
     log.debug(f"Downloading genre tree from {BEETS_GENRES_TREE_SRC}")
     resp_tree = requests.get(BEETS_GENRES_TREE_SRC)
     with open(BEETS_GENRES_TREE_PATH, "wb") as genre_tree_f:
@@ -97,7 +102,8 @@ def download_genre_data() -> None:
 def _load_genre_tree(genre_tree_raw: dict, output_list: List[Genre],
                      _parent_node: Genre = None, _depth: int = 0) -> None:
     # TODO this is actually not used yet, make this an option
-    # (allow for most-specific results)
+    #   (allow for most-specific results)
+    # DEPRECATED the genre tree is unused
     """
     Generate a list of Genre instances.
 
@@ -131,6 +137,16 @@ def _load_genre_tree(genre_tree_raw: dict, output_list: List[Genre],
 
 
 def load_genre_data() -> Tuple[List[str], List[Genre], List[str]]:
+    """
+    Load the cached genre data.
+
+    Returns:
+        A tuple consisting of:
+            - a full genre list (from genres.txt)
+            - a list of Genre instances (from the genres tree)
+            - a list of genres (generated from the genres tree, shorted than the full genre list)
+
+    """
     log.info("Loading genre data...")
 
     with open(BEETS_GENRES_LIST_PATH, "r", encoding="utf8") as genre_list_f:
@@ -138,6 +154,7 @@ def load_genre_data() -> Tuple[List[str], List[Genre], List[str]]:
 
     genres_list_ = [a.title() for a in genres_list_]
 
+    # DEPRECATED the genre tree is unused
     with open(BEETS_GENRES_TREE_PATH, "r", encoding="utf8") as genre_tree_f:
         genres_tree_ = safe_load(genre_tree_f)
 
@@ -162,6 +179,7 @@ full_genres_list: List[str]
 genres_list: List[Genre]
 genres_name_list: List[str]
 
+# DEPRECATED the genre tree is unused
 full_genres_list, genres_list, genres_name_list = load_genre_data()
 
 ######
@@ -170,11 +188,64 @@ full_genres_list, genres_list, genres_name_list = load_genre_data()
 cached_tags: Dict[Tuple[str, str, str], Optional[List[str]]] = {}
 
 
+# Caching decorator
+def cache_tag_results(func):
+    """
+    This function is a decorator for the fetch_genre_by_mbid/metadata functions.
+    Caches the results in cached_tags dictionary to speed up subsequent lookups.
+    """
+    def wrapper(arg_1, arg_2, arg_3, *rest):
+        # Return the cached result if possible
+        cache_tuple = (arg_1, arg_2, arg_3)
+        if cache_tuple in cached_tags:
+            log.debug(f"{func.__name__}: cache hit")
+            return cached_tags[cache_tuple]
+
+        # Otherwise call the function and cache its result
+        log.debug(f"{func.__name__}: cache miss")
+        result = func(arg_1, arg_2, arg_3, *rest)
+        cached_tags[cache_tuple] = result
+        return result
+
+    return wrapper
+
+
 def _get_tag_depth(tag: str) -> int:
+    # DEPRECATED this function was meant for the genre tree system, but is unused
     if tag not in genres_name_list:
         return -1
 
     return genres_list[genres_name_list.index(tag)].tree_depth
+
+
+def _filter_top_tags(tag_list: List[pyl.TopItem]) -> List[str]:
+    """
+    Given a list of pylast.TopItem tags, filter them by min_genre_weight, deduplicate them and sort them by weight.
+    Keeps only valid genres.
+
+    Args:
+        tag_list:
+            A list of pylast.TopItem tags.
+
+    Returns:
+        Sorted and deduplicated list of genre names.
+    """
+    # Now we merge and filter the tags
+    # noinspection PyUnresolvedReferences
+    merged_tags: List[Tuple[str, int]] = [
+        (a.item.name, int(a.weight)) for a in
+        tag_list
+        if int(a.weight) > config.MIN_GENRE_WEIGHT
+    ]
+
+    # Sort by popularity and deduplicate
+    sorted_tags_str: Set[str] = set([a[0] for a in sorted(merged_tags, key=lambda e: e[1])])
+    # Now filter with the genre whitelist
+    filtered_tags: List[str] = [
+        tag.title() for tag in list(sorted_tags_str) if tag.title() in full_genres_list
+    ]
+    # Shorten the list to max_genre_count (see config.toml)
+    return filtered_tags[:config.MAX_GENRE_COUNT]
 
 
 def _parse_lastfm_track_genre(
@@ -197,36 +268,34 @@ def _parse_lastfm_track_genre(
         List of strings, representing the best choices for genres.
         Length depends on max_genre_count config value.
     """
-    track_tags: List[pyl.TopItem] = track.get_top_tags(limit=config.MAX_GENRE_COUNT)
-    album_tags: List[pyl.TopItem] = album.get_top_tags(limit=config.MAX_GENRE_COUNT)
-    artist_tags: List[pyl.Artist] = artist.get_top_tags(limit=config.MAX_GENRE_COUNT)
+    # Uses the most accurate genres
+    # Tries the track first, then the album, then finally the artist if we still don't have enough genres
+    # If enough tags are in the track and album, the artist tags are not even downloaded.
+    final_tag_list: List[str] = []
 
-    # Now we merge and filter the tags
-    # noinspection PyUnresolvedReferences
-    merged_tags: List[Tuple[str, int]] = [
-        (a.item.name, int(a.weight)) for a in
-        track_tags + album_tags + artist_tags
-        if int(a.weight) > config.MIN_GENRE_WEIGHT
-    ]
+    track_tags_raw: List[pyl.TopItem] = track.get_top_tags(limit=config.MAX_GENRE_COUNT)
+    track_tags: List[str] = _filter_top_tags(track_tags_raw)
+    final_tag_list += track_tags
 
-    # Sort by popularity and deduplicate
-    sorted_tags_str: Set[str] = set([a[0] for a in sorted(merged_tags, key=lambda e: e[1])])
-    # Now filter with the genre whitelist
-    filtered_tags: List[str] = [
-        tag.title() for tag in list(sorted_tags_str) if tag.title() in full_genres_list
-    ]
-    # Shorten the list to max_genre_count (see config.toml)
-    final_tags: List[str] = filtered_tags[:config.MAX_GENRE_COUNT]
+    if len(final_tag_list) < config.MAX_GENRE_COUNT:
+        album_tags_raw: List[pyl.TopItem] = album.get_top_tags(limit=config.MAX_GENRE_COUNT)
+        album_tags: List[str] = _filter_top_tags(album_tags_raw)
+        final_tag_list += album_tags
 
-    return final_tags
+    if len(final_tag_list) < config.MAX_GENRE_COUNT:
+        artist_tags_raw: List[pyl.TopItem] = artist.get_top_tags(limit=config.MAX_GENRE_COUNT)
+        artist_tags: List[str] = _filter_top_tags(artist_tags_raw)
+        final_tag_list += artist_tags
+
+    return final_tag_list[:config.MAX_GENRE_COUNT]
 
 
-def _fetch_all_pages(
+def _search_page_gen(
         pylast_search: Union[pyl.AlbumSearch, pyl.TrackSearch, pyl.ArtistSearch],
         page_limit: int = 15
-) -> List[Union[pyl.Album, pyl.Track, pyl.Artist]]:
+) -> Generator[List[Union[pyl.Album, pyl.Track, pyl.Artist]], None, None]:
     """
-    Fetch all results from a pylast AlbumSearch/TrackSearch/ArtistSearch object.
+    Fetch results from a pylast AlbumSearch/TrackSearch/ArtistSearch object.
 
     Args:
         pylast_search:
@@ -235,85 +304,100 @@ def _fetch_all_pages(
             Hard page limit.
 
     Returns:
-        List of corresponding pylast results (pylast.Album for pylast.AlbumSearch, ...)
+        A generator, returns next page of corresponding pylast results
+        (pylast.Album for pylast.AlbumSearch, ...) on each yield.
     """
-    total = []
-
+    # TODO configurable hard page limit?
     counter = 0
     last = pylast_search.get_next_page()
     while len(last) > 0 and counter < page_limit:
-        total += last
-
         counter += 1
-        last = pylast_search.get_next_page()
-
-    return total
+        yield pylast_search.get_next_page()
 
 
+@cache_tag_results
 def fetch_genre_by_mbid(track_mbid: str, album_mbid: str, artist_mbid: str) -> Optional[List[str]]:
-    cache_tuple = (track_mbid, album_mbid, artist_mbid)
-    if cache_tuple in cached_tags:
-        log.debug("fetch_genre_by_mbid: cache hit")
-        return cached_tags[cache_tuple]
+    """
+    Given a track, album and artist MBID, find the corresponding Last.fm entries.
+    This function is cached using a combination of all three arguments.
 
-    log.debug("fetch_genre_by_mbid: cache miss")
+    Args:
+        track_mbid:
+            String with the track's MBID.
+        album_mbid:
+            String with the album's MBID.
+        artist_mbid:
+            String with the artist's MBID.
 
+    Returns:
+        List of strings containing title-cased genre names.
+        None if no result.
+    """
     try:
         track: pyl.Track = lastfm.get_track_by_mbid(track_mbid)
         album: pyl.Album = lastfm.get_album_by_mbid(album_mbid)
         artist: pyl.Artist = lastfm.get_artist_by_mbid(artist_mbid)
 
-        result = _parse_lastfm_track_genre(track, album, artist)
-        cached_tags[cache_tuple] = result
-        return result
+        return _parse_lastfm_track_genre(track, album, artist)
     except pyl.WSError:
         # No result
-        cached_tags[cache_tuple] = None
         return None
 
 
+@cache_tag_results
 def fetch_genre_by_metatada(track_title: str, album_title: str, artist_name: str) -> Optional[List[str]]:
-    # TODO convert this caching method to a decorator
-    cache_tuple = (track_title, album_title, artist_name)
-    if cache_tuple in cached_tags:
-        log.debug("fetch_genre_by_metadata: cache hit")
-        return cached_tags[cache_tuple]
+    """
+    Given a track, album and artist name, find the corresponding Last.fm entries.
+    This function is cached using a combination of all three arguments.
 
-    log.debug("fetch_genre_by_metadata: cache miss")
+    Args:
+        track_title:
+            String with the track's title.
+        album_title:
+            String with the album's title.
+        artist_name:
+            String with the artist's name.
 
+    Returns:
+        List of strings containing title-cased genre names.
+        None if no result.
+    """
     try:
-        track_search: List[pyl.Track] = _fetch_all_pages(lastfm.search_for_track(artist_name, track_title))
-        album_search: List[pyl.Album] = _fetch_all_pages(lastfm.search_for_album(album_title))
-        artist_search: List[pyl.Artist] = _fetch_all_pages(lastfm.search_for_artist(artist_name))
+        # TODO can we try to fetch genres just (for example) with an artist match?
 
+        # Fetch just one page, we don't need more
+        # TODO can this cause problems when an artist has multiple tracks with the same title?
+        #   Can we even solve this - pylast.Track has no album data?
+        track_search: List[pyl.Track] = lastfm.search_for_track(artist_name, track_title).get_next_page()
         if len(track_search) < 1:
-            cached_tags[cache_tuple] = None
             return None
-
         track: pyl.Track = track_search[0]
 
-        # Choose best matching album
-        _title_list: List[str] = [a.title for a in album_search]
-        best_album_extr: Optional[Tuple[str, int]] = extractOne(
-            album_title,
-            _title_list,
-            scorer=UWRatio,
-            score_cutoff=config.MIN_LASTFM_SIMILARITY
-        )
-        if best_album_extr is None:
-            cached_tags[cache_tuple] = None
+        # Fetch as many album pages as needed
+        album: Optional[pyl.Album] = None
+        for album_current_page in _search_page_gen(lastfm.search_for_album(album_title)):
+            album_current_list: List[str] = [a.title for a in album_current_page]
+            best_album_extr: Optional[Tuple[str, int]] = extractOne(
+                album_title,
+                album_current_list,
+                scorer=UWRatio,
+                score_cutoff=config.MIN_LASTFM_SIMILARITY
+            )
+            # If a good enough match is found, stop searching
+            if best_album_extr is not None:
+                album = album_current_page[album_current_list.index(best_album_extr[0])]
+                break
+        # If no album match, we can't search for a genre
+        if album is None:
             return None
 
-        album: pyl.Album = album_search[_title_list.index(best_album_extr[0])]
 
-        # Preprocesssed by Last.fm already, the first result should be the best match
+        artist_search: List[pyl.Artist] = lastfm.search_for_artist(artist_name).get_next_page()
+        if len(artist_search) < 1:
+            return None
         artist: pyl.Artist = artist_search[0]
 
-        result = _parse_lastfm_track_genre(track, album, artist)
-        cached_tags[cache_tuple] = result
-        return result
+        return _parse_lastfm_track_genre(track, album, artist)
     except (pyl.WSError, IndexError):
         # No result
-        cached_tags[cache_tuple] = None
         return None
-
