@@ -1,4 +1,7 @@
 import logging
+from core.configuration import config
+logging.basicConfig(level=config.VERBOSITY)
+
 import glob
 import time
 from os import path
@@ -11,14 +14,12 @@ from fuzzywuzzy.fuzz import ratio, partial_ratio
 from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
 
-from core.configuration import config
 from core.library import LibraryFile
 from core.scrobble import Scrobble, TrackSourceType
 from core.utilities import youtube_length_to_sec
 from core.musicbrainz import ReleaseTrack
-from core.genres import fetch_genre_by_mbid, fetch_genre_by_metatada
+from core.genres import fetch_genre_by_metadata
 
-logging.basicConfig(level=config.VERBOSITY)
 log = logging.getLogger(__name__)
 
 ##
@@ -440,7 +441,7 @@ for scrobble_raw in scrobbles:
     if scrobble.genre_list is None:
         log.debug("Fetching Last.fm genres.")
 
-        genres: List[str] = fetch_genre_by_metatada(
+        genres: List[str] = fetch_genre_by_metadata(
             scrobble.track_title,
             scrobble.album_name,
             scrobble.artist_name,

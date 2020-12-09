@@ -249,8 +249,8 @@ def _filter_top_tags(tag_list: List[pyl.TopItem]) -> List[str]:
 
 
 def _parse_lastfm_track_genre(
-        track: pyl.Track,
-        album: pyl.Album,
+        track: Optional[pyl.Track],
+        album: Optional[pyl.Album],
         artist: pyl.Artist,
 ) -> List[str]:
     """
@@ -273,11 +273,12 @@ def _parse_lastfm_track_genre(
     # If enough tags are in the track and album, the artist tags are not even downloaded.
     final_tag_list: List[str] = []
 
-    track_tags_raw: List[pyl.TopItem] = track.get_top_tags(limit=config.MAX_GENRE_COUNT)
-    track_tags: List[str] = _filter_top_tags(track_tags_raw)
-    final_tag_list += track_tags
+    if track is not None:
+        track_tags_raw: List[pyl.TopItem] = track.get_top_tags(limit=config.MAX_GENRE_COUNT)
+        track_tags: List[str] = _filter_top_tags(track_tags_raw)
+        final_tag_list += track_tags
 
-    if len(final_tag_list) < config.MAX_GENRE_COUNT:
+    if album is not None and len(final_tag_list) < config.MAX_GENRE_COUNT:
         album_tags_raw: List[pyl.TopItem] = album.get_top_tags(limit=config.MAX_GENRE_COUNT)
         album_tags: List[str] = _filter_top_tags(album_tags_raw)
         final_tag_list += album_tags
@@ -345,7 +346,7 @@ def fetch_genre_by_mbid(track_mbid: str, album_mbid: str, artist_mbid: str) -> O
 
 
 @cache_tag_results
-def fetch_genre_by_metatada(track_title: str, album_title: str, artist_name: str) -> Optional[List[str]]:
+def fetch_genre_by_metadata(track_title: str, album_title: str, artist_name: str) -> Optional[List[str]]:
     """
     Given a track, album and artist name, find the corresponding Last.fm entries.
     This function is cached using a combination of all three arguments.
@@ -370,38 +371,42 @@ def fetch_genre_by_metatada(track_title: str, album_title: str, artist_name: str
         #   Can we even solve this - pylast.Track has no album data?
 
         # TODO maybe use just the first page?
-        track_search: List[pyl.TopItem] = lastfm.search_for_track(artist_name, track_title).get_next_page()
-        track_search_list: List[str] = [a.title for a in track_search]
-        best_track_extr: Optional[Tuple[str, int]] = extractOne(
-            track_title,
-            track_search_list,
-            scorer=UWRatio,
-            score_cutoff=config.MIN_LASTFM_SIMILARITY
-        )
-        if best_track_extr is None:
-            return None
-
-        track: pyl.Track = track_search[track_search_list.index(best_track_extr[0])]
-
-        # Fetch as many album pages as needed
-        album: Optional[pyl.Album] = None
-        for album_current_page in _search_page_gen(lastfm.search_for_album(album_title)):
-            album_current_list: List[str] = [a.title for a in album_current_page]
-            best_album_extr: Optional[Tuple[str, int]] = extractOne(
-                album_title,
-                album_current_list,
+        track: Optional[pyl.Track] = None
+        try:
+            track_search: List[pyl.Track] = lastfm.search_for_track(artist_name, track_title).get_next_page()
+            track_search_list: List[str] = [a.title for a in track_search]
+            best_track_extr: Optional[Tuple[str, int]] = extractOne(
+                track_title,
+                track_search_list,
                 scorer=UWRatio,
                 score_cutoff=config.MIN_LASTFM_SIMILARITY
             )
+            track: Optional[pyl.Track] = track_search[track_search_list.index(best_track_extr[0])]
+        except (pyl.WSError, IndexError):
+            pass
 
-            if best_album_extr is not None:
-                album = album_current_page[album_current_list.index(best_album_extr[0])]
-                break
-        # If no album match, we can't search for a genre
-        if album is None:
-            return None
+        # Fetch as many album pages as needed
+        album: Optional[pyl.Album] = None
+        try:
+            for album_current_page in _search_page_gen(lastfm.search_for_album(album_title)):
+                album_current_list: List[str] = [a.title for a in album_current_page]
+                best_album_extr: Optional[Tuple[str, int]] = extractOne(
+                    album_title,
+                    album_current_list,
+                    scorer=UWRatio,
+                    score_cutoff=config.MIN_LASTFM_SIMILARITY
+                )
+
+                if best_album_extr is not None:
+                    album = album_current_page[album_current_list.index(best_album_extr[0])]
+                    break
+        except (pyl.WSError, IndexError):
+            pass
+
 
         artist_search: List[pyl.Artist] = lastfm.search_for_artist(artist_name).get_next_page()
+        # We might be able to search for genres using only the artist, but if the artist is unavailable
+        # the accuracy is usually pretty bad
         if len(artist_search) < 1:
             return None
         artist: pyl.Artist = artist_search[0]
