@@ -307,7 +307,7 @@ def _search_page_gen(
         A generator, returns next page of corresponding pylast results
         (pylast.Album for pylast.AlbumSearch, ...) on each yield.
     """
-    # TODO configurable hard page limit?
+    # TODO configurable default page limit?
     counter = 0
     last = pylast_search.get_next_page()
     while len(last) > 0 and counter < page_limit:
@@ -368,10 +368,20 @@ def fetch_genre_by_metatada(track_title: str, album_title: str, artist_name: str
         # Fetch just one page, we don't need more
         # TODO can this cause problems when an artist has multiple tracks with the same title?
         #   Can we even solve this - pylast.Track has no album data?
-        track_search: List[pyl.Track] = lastfm.search_for_track(artist_name, track_title).get_next_page()
-        if len(track_search) < 1:
+
+        # TODO maybe use just the first page?
+        track_search: List[pyl.TopItem] = lastfm.search_for_track(artist_name, track_title).get_next_page()
+        track_search_list: List[str] = [a.title for a in track_search]
+        best_track_extr: Optional[Tuple[str, int]] = extractOne(
+            track_title,
+            track_search_list,
+            scorer=UWRatio,
+            score_cutoff=config.MIN_LASTFM_SIMILARITY
+        )
+        if best_track_extr is None:
             return None
-        track: pyl.Track = track_search[0]
+
+        track: pyl.Track = track_search[track_search_list.index(best_track_extr[0])]
 
         # Fetch as many album pages as needed
         album: Optional[pyl.Album] = None
@@ -383,14 +393,13 @@ def fetch_genre_by_metatada(track_title: str, album_title: str, artist_name: str
                 scorer=UWRatio,
                 score_cutoff=config.MIN_LASTFM_SIMILARITY
             )
-            # If a good enough match is found, stop searching
+
             if best_album_extr is not None:
                 album = album_current_page[album_current_list.index(best_album_extr[0])]
                 break
         # If no album match, we can't search for a genre
         if album is None:
             return None
-
 
         artist_search: List[pyl.Artist] = lastfm.search_for_artist(artist_name).get_next_page()
         if len(artist_search) < 1:

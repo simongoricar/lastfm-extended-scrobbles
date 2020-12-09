@@ -81,7 +81,6 @@ def build_library_metadata_cache(file_list: List[str]):
             files_failed += 1
             continue
 
-        # TODO extract genre from file if possible, this will be a significant speedup
         lib_file: LibraryFile = LibraryFile.from_mutagen(mutagen_file)
 
         if lib_file.album_name is not None:
@@ -441,13 +440,6 @@ for scrobble_raw in scrobbles:
     if scrobble.genre_list is None:
         log.debug("Fetching Last.fm genres.")
 
-        # if "" not in (s_track_mbid, a_album_mbid, s_artist_mbid):
-        #     genres: List[str] = fetch_genre_by_mbid(
-        #         s_track_mbid,
-        #         a_album_mbid,
-        #         s_artist_mbid,
-        #     )
-        # else:
         genres: List[str] = fetch_genre_by_metatada(
             scrobble.track_title,
             scrobble.album_name,
@@ -466,14 +458,21 @@ for scrobble_raw in scrobbles:
 
 # Save the workbook to the configured path
 c = 0
+written = False
+
 while c < 5:
     try:
         xl_workbook.save(filename=config.XLSX_OUTPUT_PATH)
+        written = True
         break
     except PermissionError:
         log.warning("PermissionError while trying to open spreadsheet file, retrying in 5 seconds.")
         time.sleep(5)
         c += 1
+
+if written is False:
+    log.critical(f"Failed to write spreadsheet file to \"{config.XLSX_OUTPUT_PATH}\" after 5 retries.")
+    exit(1)
 
 t_total = round(time.time() - t_start, 1)
 log.info(f"Spreadsheet generated and saved in {t_total}s")
@@ -485,7 +484,7 @@ perc_musicbrainz_hits = round(c_musicbrainz_hits / scrobbles_len * 100, 1)
 perc_youtube_hits = round(c_youtube_hits / scrobbles_len * 100, 1)
 perc_basic_info = round(c_basic_info_hits / scrobbles_len * 100, 1)
 
-log.info(f"Statistics:\n"
+log.info(f"Source statistics:\n"
          f"  Local library (MBID): {c_local_mbid_hits} ({perc_local_mbid_hits}%)\n"
          f"  Local library (metadata): {c_local_metadata_hits} ({perc_local_metadata_hits}%)\n"
          f"  MusicBrainz: {c_musicbrainz_hits} ({perc_musicbrainz_hits}%)\n"
