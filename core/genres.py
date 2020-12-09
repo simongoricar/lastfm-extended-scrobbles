@@ -235,7 +235,7 @@ def _filter_top_tags(tag_list: List[pyl.TopItem]) -> List[str]:
     merged_tags: List[Tuple[str, int]] = [
         (a.item.name, int(a.weight)) for a in
         tag_list
-        if int(a.weight) > config.MIN_GENRE_WEIGHT
+        if int(a.weight) > config.MIN_TAG_WEIGHT
     ]
 
     # Sort by popularity and deduplicate
@@ -293,7 +293,7 @@ def _parse_lastfm_track_genre(
 
 def _search_page_gen(
         pylast_search: Union[pyl.AlbumSearch, pyl.TrackSearch, pyl.ArtistSearch],
-        page_limit: int = 15
+        page_limit: int = config.MAX_LASTFM_PAGES
 ) -> Generator[List[Union[pyl.Album, pyl.Track, pyl.Artist]], None, None]:
     """
     Fetch results from a pylast AlbumSearch/TrackSearch/ArtistSearch object.
@@ -308,7 +308,6 @@ def _search_page_gen(
         A generator, returns next page of corresponding pylast results
         (pylast.Album for pylast.AlbumSearch, ...) on each yield.
     """
-    # TODO configurable default page limit?
     counter = 0
     last = pylast_search.get_next_page()
     while len(last) > 0 and counter < page_limit:

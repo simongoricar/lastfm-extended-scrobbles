@@ -65,13 +65,21 @@ class AnalysisConfig:
         "_config",
         "_table_authentication", "_table_source_paths", "_table_dest_paths",
         "_table_cache", "_table_logging", "_table_fuzzy", "_table_genres",
+        # Authentication
         "LASTFM_API_KEY", "LASTFM_API_SECRET",
+        # SourcePaths
         "SCROBBLES_JSON_PATH", "MUSIC_LIBRARY_ROOT",
+        # DestinationPaths
         "XLSX_OUTPUT_PATH",
+        # Cache
         "CACHE_DIR", "LIBRARY_CACHE_FILE",
+        # Logging
         "VERBOSITY", "CACHE_LOG_INTERVAL", "PARSE_LOG_INTERVAL",
+        # FuzzyMatching
         "FUZZY_MIN_TITLE", "FUZZY_MIN_ALBUM", "FUZZY_MIN_ARTIST", "FUZZY_YOUTUBE_MIN_TITLE",
-        "MIN_GENRE_WEIGHT", "GENRES_USE_SPECIFIC", "MAX_GENRE_COUNT", "MIN_LASTFM_SIMILARITY"
+        # Genres
+        "MIN_TAG_WEIGHT", "GENRES_USE_SPECIFIC", "MAX_GENRE_COUNT", "MIN_LASTFM_SIMILARITY",
+        "MAX_LASTFM_PAGES"
     )
 
     def __init__(self, config_dict: TOMLConfig):
@@ -146,12 +154,11 @@ class AnalysisConfig:
         ##########
         # Genres
         ##########
-        self.MIN_GENRE_WEIGHT = int(self._table_genres.get("min_genre_weight"))
-        # self.GENRES_USE_SPECIFIC = self._table_genres.get("use_most_specific")
-        self.MAX_GENRE_COUNT = int(self._table_genres.get("max_genre_count"))
+        self.MIN_TAG_WEIGHT = int(self._table_genres.get("min_tag_weight"))
         self.MIN_LASTFM_SIMILARITY = int(self._table_genres.get("min_lastfm_suggestion_similarity"))
-
-
+        self.MAX_LASTFM_PAGES = int(self._table_genres.get("max_lastfm_pages"))
+        self.MAX_GENRE_COUNT = int(self._table_genres.get("max_genre_count"))
+        # self.GENRES_USE_SPECIFIC = self._table_genres.get("use_most_specific")
 
 
 raw_config = TOMLConfig.from_filename(CONFIG_FILE)
