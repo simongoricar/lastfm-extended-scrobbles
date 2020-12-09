@@ -23,16 +23,17 @@ class LibraryFile:
         self.file_path: str = kwargs.pop("file_path")
         self.track_length: Union[int, float] = kwargs.pop("track_length")
 
-        self.artist_name: Optional[str] = kwargs.get("artist_name")
-        self.artist_mbid: Optional[str] = kwargs.get("artist_mbid")
+        # This way we avoid empty strings
+        self.artist_name: Optional[str] = kwargs.get("artist_name") or None
+        self.artist_mbid: Optional[str] = kwargs.get("artist_mbid") or None
 
-        self.album_name: Optional[str] = kwargs.get("album_name")
-        self.album_mbid: Optional[str] = kwargs.get("album_mbid")
+        self.album_name: Optional[str] = kwargs.get("album_name") or None
+        self.album_mbid: Optional[str] = kwargs.get("album_mbid") or None
 
-        self.track_title: Optional[str] = kwargs.get("track_title")
-        self.track_mbid: Optional[str] = kwargs.get("track_mbid")
+        self.track_title: Optional[str] = kwargs.get("track_title") or None
+        self.track_mbid: Optional[str] = kwargs.get("track_mbid") or None
 
-        self.genre_list: Optional[str] = kwargs.get("genre_list")
+        self.genre_list: Optional[str] = kwargs.get("genre_list") or None
 
     def __str__(self):
         return f"<LibraryFile: {self.artist_name} - {self.album_name} - {self.track_title} ({self.track_length})>"

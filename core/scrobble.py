@@ -77,6 +77,9 @@ class RawScrobble:
             scrobble_time=scrobble_time
         )
 
+    def __str__(self):
+        return f"<RawScrobble artist=\"{self.artist_name}\" album=\"{self.album_title}\" track=\"{self.track_title}\">"
+
 
 class Scrobble:
     """
