@@ -7,11 +7,12 @@ from .exception import ConfigException
 
 log = logging.getLogger(__name__)
 
-DATA_DIR = "./data/"
+BASE_DIR = path.abspath(path.join(path.dirname(__file__), ".."))
+DATA_DIR = path.abspath(path.join(BASE_DIR, "./data/"))
 CONFIG_FILE_NAME = "config.toml"
 PYPROJECT_FILE_NAME = "pyproject.toml"
 
-PYPROJECT_FILE = path.abspath(PYPROJECT_FILE_NAME)
+PYPROJECT_FILE = path.abspath(path.join(BASE_DIR, PYPROJECT_FILE_NAME))
 CONFIG_FILE = path.abspath(path.join(DATA_DIR, CONFIG_FILE_NAME))
 
 logging_name_to_level = {

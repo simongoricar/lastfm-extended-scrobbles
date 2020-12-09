@@ -374,6 +374,7 @@ def find_on_youtube(
 sheet.append(Scrobble.spreadsheet_header())
 
 # Go through every scrobble and append a row for each entry
+# TODO investigate this not summing up to total amount
 c_local_mbid_hits = 0
 c_local_metadata_hits = 0
 c_musicbrainz_hits = 0
