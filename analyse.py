@@ -374,7 +374,6 @@ def find_on_youtube(
 sheet.append(Scrobble.spreadsheet_header())
 
 # Go through every scrobble and append a row for each entry
-# TODO investigate this not summing up to total amount
 c_local_mbid_hits = 0
 c_local_metadata_hits = 0
 c_musicbrainz_hits = 0
@@ -425,6 +424,7 @@ for scrobble_raw in scrobbles:
 
         if scrobble is not None:
             log.debug(f"Match by MBID (MusicBrainz): {s_artist} - {s_album} - {s_name} ({s_track_mbid})")
+            c_musicbrainz_hits += 1
 
     # Try youtube search
     if scrobble is None:
