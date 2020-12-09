@@ -1,5 +1,9 @@
 #################
 # This script will manually download the scrobbles from last.fm's api
+#
+# Usage:
+# When calling this script, pass your username with the parameters "--username [username]".
+# If no parameter is passed, you will be asked for the username interactively.
 #################
 import logging
 import time
@@ -10,6 +14,9 @@ import getopt
 import json
 from typing import Optional
 from urllib.parse import urlencode
+
+# Add the base directory as a path for the import
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.configuration import config
 
@@ -24,6 +31,9 @@ LASTFM_API_URL = "https://ws.audioscrobbler.com/2.0/"
 # Parse command line arguments
 username: Optional[str] = None
 try:
+    if len(sys.argv[1:]) < 1:
+        raise getopt.GetoptError("no args")
+
     opts, args = getopt.getopt(sys.argv[1:], "u:", "username=")
 
     for opt, arg in opts:
