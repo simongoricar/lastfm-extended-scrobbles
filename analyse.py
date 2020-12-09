@@ -200,6 +200,10 @@ log.info("[STEP 2] Loading scrobbles file...")
 t_start = time.time()
 
 
+# TODO data from the tools linked in readme doesn't include the extended data (loved tracks)
+#   Look into getting that data as well
+#   Maybe lastfm-extended-scrobbles could download that data for you as well
+#   so you don't need to depend on external sources?
 def load_scrobbles(json_file_path: str) -> List:
     with open(json_file_path, "r", encoding="utf8") as scrobbles_file:
         scrobbles_raw = load(scrobbles_file)
@@ -231,6 +235,7 @@ sheet.title = "Data"
 # Search caches
 # This cache really pays off if the tracks repeat (over a longer period of time for example)
 # TODO implement a better cache than this
+#   cache should probably carry over restarts, but we need an age indicator
 
 # Dict[query, duration]
 youtube_cache_by_query: Dict[str, int] = {}
@@ -448,6 +453,7 @@ for scrobble_raw in scrobbles:
         )
         scrobble.genre_list = genres
 
+    # TODO add a "loved track" column
     # Finally, dump this scrobble data into the next spreadsheet row
     sheet.append(scrobble.to_spreadsheet_list())
 

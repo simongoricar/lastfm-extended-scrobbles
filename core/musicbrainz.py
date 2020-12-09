@@ -15,7 +15,11 @@ track_mbid_to_releasetrack_cache: Dict[str, Optional["ReleaseTrack"]] = {}
 
 class ReleaseTrack:
     __slots__ = (
-        "track_title", "track_mbid", "track_length", "album_name", "album_mbid"
+        "track_title",
+        "track_mbid",
+        "track_length",
+        "album_title",
+        "album_mbid"
     )
 
     GLOBAL_HEADERS = {
@@ -25,13 +29,12 @@ class ReleaseTrack:
     }
 
     def __init__(self, **kwargs):
-        # TODO rename album_name arguments to album_title for accuracy (see Scobble and LibraryFile as well)
         self.track_title = kwargs.pop("track_title")
         self.track_mbid = kwargs.pop("track_mbid")
         # .pop for required kwargs, .get for optional
         self.track_length = kwargs.get("track_length")
 
-        self.album_name = kwargs.pop("album_name")
+        self.album_title = kwargs.pop("album_title")
         self.album_mbid = kwargs.pop("album_mbid")
 
     @classmethod

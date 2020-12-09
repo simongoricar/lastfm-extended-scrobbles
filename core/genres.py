@@ -363,13 +363,10 @@ def fetch_genre_by_metadata(track_title: str, album_title: str, artist_name: str
         None if no result.
     """
     try:
-        # TODO can we try to fetch genres just (for example) with an artist match?
-
         # Fetch just one page, we don't need more
         # TODO can this cause problems when an artist has multiple tracks with the same title?
         #   Can we even solve this - pylast.Track has no album data?
 
-        # TODO maybe use just the first page?
         track: Optional[pyl.Track] = None
         try:
             track_search: List[pyl.Track] = lastfm.search_for_track(artist_name, track_title).get_next_page()
