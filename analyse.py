@@ -15,7 +15,7 @@ from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
 
 from core.library import LibraryFile
-from core.scrobble import Scrobble, TrackSourceType, RawScrobble
+from core.scrobble import ExtendedScrobble, TrackSourceType, RawScrobble
 from core.utilities import youtube_length_to_sec, get_best_attribute
 from core.musicbrainz import ReleaseTrack
 from core.genres import fetch_genre_by_metadata
@@ -244,18 +244,18 @@ local_library_cache_by_metadata: Dict[Tuple[str, str, str], Optional[LibraryFile
 
 
 # Define search functions
-def find_by_mbid(raw_scrobble: RawScrobble) -> Optional[Scrobble]:
+def find_by_mbid(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
     library_track = cache_by_track_mbid.get(raw_scrobble.track_mbid)
 
     if library_track is None:
         return None
     else:
-        return Scrobble.from_library_track(raw_scrobble, library_track, TrackSourceType.LOCAL_LIBRARY_MBID)
+        return ExtendedScrobble.from_library_track(raw_scrobble, library_track, TrackSourceType.LOCAL_LIBRARY_MBID)
 
 
 def find_by_metadata(
         raw_scrobble: RawScrobble,
-) -> Optional[Scrobble]:
+) -> Optional[ExtendedScrobble]:
     # TODO decorator for caching the results
     # Find the best title, album and artist match in the local library cache
     # TODO use filename as fallback
@@ -269,7 +269,7 @@ def find_by_metadata(
         if track is None:
             return None
         else:
-            return Scrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
+            return ExtendedScrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
 
     log.debug("find_by_metadata: cache miss")
     # Start by filtering to the closest artist name match
@@ -316,24 +316,24 @@ def find_by_metadata(
         local_library_cache_by_metadata[caching_tuple] = None
         return None
 
-    # Otherwise build a Scrobble with this information
+    # Otherwise build a ExtendedScrobble with this information
     final_track = current_cache_list[c_to_track_titles.index(best_track_match[0])]
 
-    return Scrobble.from_library_track(raw_scrobble, final_track, TrackSourceType.LOCAL_LIBRARY_METADATA)
+    return ExtendedScrobble.from_library_track(raw_scrobble, final_track, TrackSourceType.LOCAL_LIBRARY_METADATA)
 
 
-def find_on_musicbrainz(raw_scrobble: RawScrobble) -> Optional[Scrobble]:
+def find_on_musicbrainz(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
     release_track = ReleaseTrack.from_track_mbid(raw_scrobble.track_mbid)
     if release_track is None:
         return None
 
     log.debug(f"find_on_musicbrainz: got release track")
-    return Scrobble.from_musicbrainz_track(raw_scrobble, release_track)
+    return ExtendedScrobble.from_musicbrainz_track(raw_scrobble, release_track)
 
 
 def find_on_youtube(
         raw_scrobble: RawScrobble
-) -> Optional[Scrobble]:
+) -> Optional[ExtendedScrobble]:
     # Search YouTube for the closest "artist title" match
     query = f"{raw_scrobble.artist_name} {raw_scrobble.album_title} {raw_scrobble.track_title}"
 
@@ -357,18 +357,18 @@ def find_on_youtube(
         else:
             log.debug("YouTube: got a hit")
 
-        # Parse the closest one into a proper Scrobble
+        # Parse the closest one into a proper ExtendedScrobble
         index = search.titles.index(closest_match[0])
         duration_human = search.durations[index]
         duration_sec = youtube_length_to_sec(duration_human)
 
         youtube_cache_by_query[query] = duration_sec
 
-    return Scrobble.from_youtube(raw_scrobble, duration_sec)
+    return ExtendedScrobble.from_youtube(raw_scrobble, duration_sec)
 
 
 # Append the header
-sheet.append(Scrobble.spreadsheet_header())
+sheet.append(ExtendedScrobble.spreadsheet_header())
 
 # Go through every scrobble and append a row for each entry
 c_local_mbid_hits = 0
@@ -389,7 +389,7 @@ for scrobble_raw_data in scrobbles:
     # 2) Use track metadata (local library)
     # 3) Use track MBID (search on MusicBrainz)
     # 3) Use track metadata (YouTube search)
-    scrobble: Optional[Scrobble] = None
+    scrobble: Optional[ExtendedScrobble] = None
 
     # Try local track mbid search
     if rs.track_mbid is not None:
@@ -431,7 +431,7 @@ for scrobble_raw_data in scrobbles:
     # If absolutely no match can be found, create a fallback scrobble with just the basic data
     if scrobble is None:
         log.debug("No match, using basic scrobble data.")
-        scrobble = Scrobble.from_basic_data(rs)
+        scrobble = ExtendedScrobble.from_basic_data(rs)
         c_basic_info_hits += 1
 
     #########
