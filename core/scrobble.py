@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any, List
 
+from .utilities import get_best_attribute
 from .library import LibraryFile
 from .musicbrainz import ReleaseTrack
 
@@ -10,6 +11,71 @@ class TrackSourceType:
     LOCAL_LIBRARY_METADATA = "local_library_metadata"
     MUSICBRAINZ = "musicbrainz"
     YOUTUBE = "youtube"
+
+
+class RawScrobble:
+    """
+    Just the original scrobble data.
+    """
+    __slots__ = (
+        "artist_name",
+        "artist_mbid",
+        "album_title",
+        "album_mbid",
+        "track_title",
+        "track_mbid",
+        "track_love",
+        "scrobble_time",
+    )
+
+    def __init__(self, **kwargs):
+        self.artist_name = kwargs.pop("artist_name")
+        self.artist_mbid = kwargs.pop("artist_mbid")
+
+        self.album_title = kwargs.pop("album_title")
+        self.album_mbid = kwargs.pop("album_mbid")
+
+        self.track_title = kwargs.pop("track_title")
+        self.track_mbid = kwargs.pop("track_mbid")
+        self.track_love = kwargs.pop("track_love")
+
+        self.scrobble_time = kwargs.pop("scrobble_time")
+
+    @classmethod
+    def from_raw_data(cls, data: Dict[str, Any]):
+        s_artist_raw: dict = data.get("artist") or {}
+        s_album_raw: dict = data.get("album") or {}
+        s_date_raw: dict = data.get("date") or {}
+
+        s_artist_mbid: str = s_artist_raw.get("mbid")
+        s_artist_name: str = get_best_attribute(s_artist_raw, ("name", "#text"))
+
+        s_album_mbid: str = s_album_raw.get("mbid")
+        s_album_title: str = get_best_attribute(s_album_raw, ("name", "#text"))
+
+        s_track_mbid: str = data.get("mbid")
+        s_track_title: str = data.get("name")
+        s_track_love: bool = True if data.get("loved") == 1 else False
+
+        scrobble_time: Optional[int]
+        if s_date_raw:
+            scrobble_time = int(s_date_raw.get("uts"))
+        else:
+            scrobble_time = None
+
+        return cls(
+            artist_name=s_artist_name,
+            artist_mbid=s_artist_mbid,
+
+            album_title=s_album_title,
+            album_mbid=s_album_mbid,
+
+            track_title=s_track_title,
+            track_mbid=s_track_mbid,
+            track_love=s_track_love,
+
+            scrobble_time=scrobble_time
+        )
 
 
 class Scrobble:
@@ -26,6 +92,7 @@ class Scrobble:
         "track_mbid",
         "track_source",
         "track_length",
+        "track_loved",
         "genre_list",
     )
 
@@ -43,62 +110,14 @@ class Scrobble:
         self.track_mbid: Optional[str] = kwargs.get("track_mbid")
         # Unit: seconds
         self.track_length: Optional[int] = kwargs.get("track_length")
+        track_loved = kwargs.get("track_loved")
+        self.track_loved: Optional[int] = int(track_loved) if track_loved is not None else None
 
         self.genre_list: Optional[List[str]] = kwargs.get("genre_list")
 
-    @staticmethod
-    def parse_raw_scrobble(raw_scrobble: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Helper function to parse useful data out of the raw scrobble data.
-
-        Args:
-            raw_scrobble:
-                Raw scrobble dict (one entry) as exported from last.fm.
-
-        Returns:
-            Dict of useful information from the scrobble.
-            Keys: time, artist_name, artist_mbid, album_name, album_mbid, track_title, track_mbid
-        """
-        date_raw = raw_scrobble.get("date")
-        if date_raw is not None:
-            scrobble_time = int(date_raw.get("uts"))
-        else:
-            scrobble_time = None
-
-        # Fall back to title, artist and album of the scrobble
-        artist_raw = raw_scrobble.get("artist")
-        if artist_raw is not None:
-            artist_name = artist_raw.get("#text")
-            artist_mbid = artist_raw.get("mbid")
-        else:
-            artist_name = None
-            artist_mbid = None
-
-        album_raw = raw_scrobble.get("album")
-        if album_raw is not None:
-            album_name = album_raw.get("#text")
-            album_mbid = album_raw.get("mbid")
-        else:
-            album_name = None
-            album_mbid = None
-
-        track_title = raw_scrobble.get("name")
-        track_mbid = raw_scrobble.get("mbid")
-
-        return {
-            "time": scrobble_time,
-            "artist_name": artist_name,
-            "artist_mbid": artist_mbid,
-            "album_name": album_name,
-            "album_mbid": album_mbid,
-            "track_title": track_title,
-            "track_mbid": track_mbid,
-        }
-
-
     @classmethod
     def from_library_track(
-            cls, raw_scrobble: Dict[str, Any], track: LibraryFile,
+            cls, raw_scrobble: RawScrobble, track: LibraryFile,
             track_source: str = TrackSourceType.LOCAL_LIBRARY_MBID
     ):
         """
@@ -115,15 +134,9 @@ class Scrobble:
         Returns:
             Scrobble instance constructed using scrobble data + local music slibrary.
         """
-        date_raw = raw_scrobble.get("date")
-        if date_raw is not None:
-            scrobble_time = int(date_raw.get("uts"))
-        else:
-            scrobble_time = None
-
         return cls(
             track_source=track_source,
-            epoch_time=scrobble_time,
+            epoch_time=raw_scrobble.scrobble_time,
 
             artist_name=track.artist_name,
             artist_mbid=track.artist_mbid,
@@ -134,11 +147,13 @@ class Scrobble:
             track_title=track.track_title,
             track_mbid=track.track_mbid,
             track_length=round(track.track_length, 1),
+            track_loved=raw_scrobble.track_love,
+
             genre_list=track.genre_list,
         )
 
     @classmethod
-    def from_musicbrainz_track(cls, raw_scrobble: Dict[str, Any], track: ReleaseTrack):
+    def from_musicbrainz_track(cls, raw_scrobble: RawScrobble, track: ReleaseTrack):
         """
         Use MusicBrainz track duration and construct a Scrobble with the help of normal scrobble data.
         Args:
@@ -148,27 +163,29 @@ class Scrobble:
         Returns:
 
         """
-        scrobble_info = cls.parse_raw_scrobble(raw_scrobble)
         # Use length from ReleaseTrack
         track_length = track.track_length
 
         return cls(
             track_source=TrackSourceType.MUSICBRAINZ,
-            epoch_time=scrobble_info["time"],
+            epoch_time=raw_scrobble.scrobble_time,
 
-            artist_name=scrobble_info["artist_name"],
-            artist_mbid=scrobble_info["artist_mbid"],
+            artist_name=raw_scrobble.artist_name,
+            artist_mbid=raw_scrobble.artist_mbid,
 
-            album_name=scrobble_info["album_name"],
-            album_mbid=scrobble_info["album_mbid"],
+            album_name=raw_scrobble.album_title,
+            album_mbid=raw_scrobble.album_mbid,
 
-            track_title=scrobble_info["track_title"],
-            track_mbid=scrobble_info["track_mbid"],
+            track_title=raw_scrobble.track_title,
+            track_mbid=raw_scrobble.track_mbid,
             track_length=track_length,
+            track_loved=raw_scrobble.track_love,
+
+            genre_list=None,
         )
 
     @classmethod
-    def from_youtube(cls, raw_scrobble: Dict[str, Any], video_duration: int):
+    def from_youtube(cls, raw_scrobble: RawScrobble, video_duration: int):
         """
         Use YouTube video duration and construct a Scrobble with the help of normal scrobble data.
 
@@ -181,27 +198,29 @@ class Scrobble:
         Returns:
             Scrobble instance constructed using scrobble data + YouTube data.
         """
-        scrobble_info = cls.parse_raw_scrobble(raw_scrobble)
         # Use length from the video
         track_length = video_duration
 
         return cls(
             track_source=TrackSourceType.YOUTUBE,
-            epoch_time=scrobble_info["time"],
+            epoch_time=raw_scrobble.scrobble_time,
 
-            artist_name=scrobble_info["artist_name"],
-            artist_mbid=scrobble_info["artist_mbid"],
+            artist_name=raw_scrobble.artist_name,
+            artist_mbid=raw_scrobble.artist_mbid,
 
-            album_name=scrobble_info["album_name"],
-            album_mbid=scrobble_info["album_mbid"],
+            album_name=raw_scrobble.album_title,
+            album_mbid=raw_scrobble.album_mbid,
 
-            track_title=scrobble_info["track_title"],
-            track_mbid=scrobble_info["track_mbid"],
+            track_title=raw_scrobble.track_title,
+            track_mbid=raw_scrobble.track_mbid,
             track_length=track_length,
+            track_loved=raw_scrobble.track_love,
+
+            genre_list=None,
         )
 
     @classmethod
-    def from_basic_data(cls, raw_scrobble: Dict[str, Any]):
+    def from_basic_data(cls, raw_scrobble: RawScrobble):
         """
         Use just basic scrobble data and instance a Scrobble. Length, for example, will be empty though.
 
@@ -212,21 +231,22 @@ class Scrobble:
         Returns:
             Scrobble instance constructed only scrobble data.
         """
-        scrobble_info = cls.parse_raw_scrobble(raw_scrobble)
-
         return cls(
             track_source=TrackSourceType.JUST_SCROBBLE,
-            epoch_time=scrobble_info["time"],
+            epoch_time=raw_scrobble.scrobble_time,
 
-            artist_name=scrobble_info["artist_name"],
-            artist_mbid=scrobble_info["artist_mbid"],
+            artist_name=raw_scrobble.artist_name,
+            artist_mbid=raw_scrobble.artist_mbid,
 
-            album_name=scrobble_info["album_name"],
-            album_mbid=scrobble_info["album_mbid"],
+            album_name=raw_scrobble.album_title,
+            album_mbid=raw_scrobble.album_mbid,
 
-            track_title=scrobble_info["track_title"],
-            track_mbid=scrobble_info["track_mbid"],
+            track_title=raw_scrobble.track_title,
+            track_mbid=raw_scrobble.track_mbid,
             track_length=None,
+            track_loved=raw_scrobble.track_love,
+
+            genre_list=None,
         )
 
     ########################
@@ -248,6 +268,7 @@ class Scrobble:
             "track_title",
             "track_mbid",
             "track_length",
+            "track_loved",
             "genres",
         ]
 
@@ -268,5 +289,6 @@ class Scrobble:
             self.track_title,
             self.track_mbid,
             self.track_length,
+            self.track_loved,
             ", ".join(self.genre_list if self.genre_list is not None else [])
         ]

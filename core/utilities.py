@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Dict, Optional, Tuple
 
 from mutagen import FileType
 
@@ -29,3 +29,27 @@ def youtube_length_to_sec(human_time: str) -> int:
         total += int(separated[-3]) * 60 * 60
 
     return total
+
+
+def get_best_attribute(item: Dict[str, Optional[str]], keys: Tuple, fallback: Any = None) -> Optional[str]:
+    """
+    Due to the weird nature of data exported from Last.fm, we need to check multiple keys to find the proper value.
+    This function abstracts the search.
+
+    Args:
+        item:
+            Dictionary to look on.
+        keys:
+            Tuple of keys to check.
+        fallback:
+            Value to return when no match can be found.
+
+    Returns:
+        First non-None/non-empty string result.
+    """
+    for k in keys:
+        value = item.get(k)
+        if value not in (None, ""):
+            return value
+
+    return fallback

@@ -15,8 +15,8 @@ from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
 
 from core.library import LibraryFile
-from core.scrobble import Scrobble, TrackSourceType
-from core.utilities import youtube_length_to_sec
+from core.scrobble import Scrobble, TrackSourceType, RawScrobble
+from core.utilities import youtube_length_to_sec, get_best_attribute
 from core.musicbrainz import ReleaseTrack
 from core.genres import fetch_genre_by_metadata
 
@@ -235,7 +235,7 @@ sheet.title = "Data"
 # Search caches
 # This cache really pays off if the tracks repeat (over a longer period of time for example)
 # TODO implement a better cache than this
-#   cache should probably carry over restarts, but we need an age indicator
+#   cache should probably carry over restarts, but we need a TTL
 
 # Dict[query, duration]
 youtube_cache_by_query: Dict[str, int] = {}
@@ -244,8 +244,8 @@ local_library_cache_by_metadata: Dict[Tuple[str, str, str], Optional[LibraryFile
 
 
 # Define search functions
-def find_by_mbid(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scrobble]:
-    library_track = cache_by_track_mbid.get(track_mbid)
+def find_by_mbid(raw_scrobble: RawScrobble) -> Optional[Scrobble]:
+    library_track = cache_by_track_mbid.get(raw_scrobble.track_mbid)
 
     if library_track is None:
         return None
@@ -254,14 +254,14 @@ def find_by_mbid(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scro
 
 
 def find_by_metadata(
-        raw_scrobble: Dict[str, Any],
-        track_title: str, track_album: str, track_artist: str
+        raw_scrobble: RawScrobble,
 ) -> Optional[Scrobble]:
+    # TODO decorator for caching the results
     # Find the best title, album and artist match in the local library cache
     # TODO use filename as fallback
 
     # Use cached result if possible
-    caching_tuple = (track_title, track_album, track_artist)
+    caching_tuple = (raw_scrobble.track_title, raw_scrobble.album_title, raw_scrobble.artist_name)
     if caching_tuple in local_library_cache_by_metadata:
         log.debug("find_by_metadata: cache hit")
         track: Optional[LibraryFile] = local_library_cache_by_metadata[caching_tuple]
@@ -270,60 +270,60 @@ def find_by_metadata(
             return None
         else:
             return Scrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
-    else:
-        log.debug("find_by_metadata: cache miss")
-        # Start by filtering to the closest artist name match
-        best_artist_match: Optional[Tuple[str, int]] = extractOne(
-            track_artist,
-            cache_list_of_artists,
+
+    log.debug("find_by_metadata: cache miss")
+    # Start by filtering to the closest artist name match
+    best_artist_match: Optional[Tuple[str, int]] = extractOne(
+        raw_scrobble.artist_name,
+        cache_list_of_artists,
+        scorer=ratio,
+        score_cutoff=config.FUZZY_MIN_ARTIST
+    )
+
+    # Edge case: if no match can be found, we should stop
+    if best_artist_match is None:
+        local_library_cache_by_metadata[caching_tuple] = None
+        return None
+
+    # Otherwise, build a list of LibraryFiles for further filtering
+    current_cache_list: List[LibraryFile] = cache_by_artist[best_artist_match[0]]
+
+    # Now filter by album if possible
+    if raw_scrobble.album_title not in (None, ""):
+        albums = set([a.album_name for a in current_cache_list])
+        best_album_match: Optional[Tuple[str, int]] = extractOne(
+            raw_scrobble.album_title,
+            albums,
             scorer=ratio,
-            score_cutoff=config.FUZZY_MIN_ARTIST
+            score_cutoff=config.FUZZY_MIN_ALBUM
         )
 
-        # Edge case: if no match can be found, we should stop
-        if best_artist_match is None:
-            local_library_cache_by_metadata[caching_tuple] = None
-            return None
+        # If a match is found, filter the list by this album
+        if best_album_match is not None:
+            current_cache_list = [a for a in current_cache_list if a.album_name == best_album_match[0]]
 
-        # Otherwise, build a list of LibraryFiles for further filtering
-        current_cache_list: List[LibraryFile] = cache_by_artist[best_artist_match[0]]
+    # Finally, choose the best track by title
+    c_to_track_titles = [a.track_title for a in current_cache_list]
+    best_track_match: Optional[Tuple[str, int]] = extractOne(
+        raw_scrobble.track_title,
+        c_to_track_titles,
+        scorer=ratio,
+        score_cutoff=config.FUZZY_MIN_TITLE
+    )
 
-        # Now filter by album if possible
-        if track_album not in (None, ""):
-            albums = set([a.album_name for a in current_cache_list])
-            best_album_match: Optional[Tuple[str, int]] = extractOne(
-                track_album,
-                albums,
-                scorer=ratio,
-                score_cutoff=config.FUZZY_MIN_ALBUM
-            )
+    # Edge case: no title match, exit here
+    if best_track_match is None:
+        local_library_cache_by_metadata[caching_tuple] = None
+        return None
 
-            # If a match is found, filter the list by this album
-            if best_album_match is not None:
-                current_cache_list = [a for a in current_cache_list if a.album_name == best_album_match[0]]
+    # Otherwise build a Scrobble with this information
+    final_track = current_cache_list[c_to_track_titles.index(best_track_match[0])]
 
-        # Finally, choose the best track by title
-        c_to_track_titles = [a.track_title for a in current_cache_list]
-        best_track_match: Optional[Tuple[str, int]] = extractOne(
-            track_title,
-            c_to_track_titles,
-            scorer=ratio,
-            score_cutoff=config.FUZZY_MIN_TITLE
-        )
-
-        # Edge case: no title match, exit here
-        if best_track_match is None:
-            local_library_cache_by_metadata[caching_tuple] = None
-            return None
-
-        # Otherwise build a Scrobble with this information
-        final_track = current_cache_list[c_to_track_titles.index(best_track_match[0])]
-
-        return Scrobble.from_library_track(raw_scrobble, final_track, TrackSourceType.LOCAL_LIBRARY_METADATA)
+    return Scrobble.from_library_track(raw_scrobble, final_track, TrackSourceType.LOCAL_LIBRARY_METADATA)
 
 
-def find_on_musicbrainz(raw_scrobble: Dict[str, Any], track_mbid: str) -> Optional[Scrobble]:
-    release_track = ReleaseTrack.from_track_mbid(track_mbid)
+def find_on_musicbrainz(raw_scrobble: RawScrobble) -> Optional[Scrobble]:
+    release_track = ReleaseTrack.from_track_mbid(raw_scrobble.track_mbid)
     if release_track is None:
         return None
 
@@ -332,13 +332,10 @@ def find_on_musicbrainz(raw_scrobble: Dict[str, Any], track_mbid: str) -> Option
 
 
 def find_on_youtube(
-        raw_scrobble: Dict[str, Any],
-        track_title: str,
-        track_album: str,
-        track_artist: str
+        raw_scrobble: RawScrobble
 ) -> Optional[Scrobble]:
     # Search YouTube for the closest "artist title" match
-    query = f"{track_artist} {track_album} {track_title}"
+    query = f"{raw_scrobble.artist_name} {raw_scrobble.album_title} {raw_scrobble.track_title}"
 
     if query in youtube_cache_by_query:
         log.debug("YouTube: using cached search")
@@ -381,16 +378,8 @@ c_youtube_hits = 0
 c_basic_info_hits = 0
 
 c = 0
-for scrobble_raw in scrobbles:
-    s_track_mbid = scrobble_raw.get("mbid")
-
-    s_name = scrobble_raw.get("name")
-    s_artist_raw = scrobble_raw.get("artist")
-    s_artist_mbid = None if s_artist_raw is None else s_artist_raw.get("mbid")
-    s_artist = None if s_artist_raw is None else s_artist_raw.get("#text")
-    s_album_raw = scrobble_raw.get("album")
-    a_album_mbid = None if s_album_raw is None else s_album_raw.get("mbid")
-    s_album = None if s_album_raw is None else s_album_raw.get("#text")
+for scrobble_raw_data in scrobbles:
+    rs: RawScrobble = RawScrobble.from_raw_data(scrobble_raw_data)
 
     #########
     # STEP 1: Find source
@@ -400,49 +389,53 @@ for scrobble_raw in scrobbles:
     # 2) Use track metadata (local library)
     # 3) Use track MBID (search on MusicBrainz)
     # 3) Use track metadata (YouTube search)
-    scrobble = None
+    scrobble: Optional[Scrobble] = None
 
     # Try local track mbid search
-    if s_track_mbid:
+    if rs.track_mbid is not None:
         # Look up the track in cache via mbid
-        scrobble = find_by_mbid(scrobble_raw, s_track_mbid)
+        scrobble = find_by_mbid(rs)
         if scrobble is not None:
-            log.debug(f"Match by MBID (local library): {s_artist} - {s_album} - {s_name} ({s_track_mbid})")
+            log.debug(f"Match by MBID (local library): "
+                      f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
             c_local_mbid_hits += 1
 
     # Try local metadata search
-    if scrobble is None and s_name is not None:
-        scrobble = find_by_metadata(scrobble_raw, s_name, s_album, s_artist)
+    if scrobble is None and rs.track_title is not None:
+        scrobble = find_by_metadata(rs)
 
         if scrobble is not None:
-            log.debug(f"Match by metadata (local library): {s_artist} - {s_album} - {s_name} ({s_track_mbid})")
+            log.debug(f"Match by metadata (local library): "
+                      f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
             c_local_metadata_hits += 1
 
     # Try MusicBrainz
-    if scrobble is None and s_track_mbid not in (None, ""):
-        scrobble = find_on_musicbrainz(scrobble_raw, s_track_mbid)
+    if scrobble is None and rs.track_mbid is not None:
+        scrobble = find_on_musicbrainz(rs)
 
         if scrobble is not None:
-            log.debug(f"Match by MBID (MusicBrainz): {s_artist} - {s_album} - {s_name} ({s_track_mbid})")
+            log.debug(f"Match by MBID (MusicBrainz): "
+                      f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
             c_musicbrainz_hits += 1
 
     # Try youtube search
     if scrobble is None:
         log.debug("Trying YouTube search.")
-        scrobble = find_on_youtube(scrobble_raw, s_name, s_album, s_artist)
+        scrobble = find_on_youtube(rs)
 
         if scrobble is not None:
-            log.debug(f"Match by metadata (YouTube): {s_artist} - {s_album} - {s_name}")
+            log.debug(f"Match by metadata (YouTube): "
+                      f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
             c_youtube_hits += 1
 
     # If absolutely no match can be found, create a fallback scrobble with just the basic data
     if scrobble is None:
         log.debug("No match, using basic scrobble data.")
-        scrobble = Scrobble.from_basic_data(scrobble_raw)
+        scrobble = Scrobble.from_basic_data(rs)
         c_basic_info_hits += 1
 
     #########
-    # STEP 1: Find genre if needed
+    # STEP 2: Find genre if needed
     #########
     if scrobble.genre_list is None:
         log.debug("Fetching Last.fm genres.")
