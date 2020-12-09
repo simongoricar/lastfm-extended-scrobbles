@@ -12,12 +12,12 @@ import requests
 import sys
 import getopt
 import json
-from typing import Optional
+from typing import Optional, List
 from urllib.parse import urlencode
 
 # Add the base directory as a path for the import
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
+# Otherwise this won't work
 from core.configuration import config
 
 logging.basicConfig(level=config.VERBOSITY)
@@ -65,33 +65,34 @@ def request_page(lastfm_username: str, page_num: int) -> dict:
     return resp.json()
 
 
-scrobbles_pages = []
-page_counter = 1
+scrobbles_pages: List[List[dict]] = []
+page_counter: int = 1
 
 # Request first page and find the total number of pages
 log.info("Requesting first page.")
+
 first_request = request_page(username, page_counter)
 recenttracks_raw = first_request.get("recenttracks") or {}
 scrobbles_pages.append(recenttracks_raw.get("track") or [])
 
 total_pages = int(recenttracks_raw.get("@attr").get("totalPages"))
-
 log.info(f"Total pages: {total_pages}, downloading...")
 
 # Request the rest of the pages
 while page_counter <= total_pages:
     log.info(f"Requesting page {page_counter}/{total_pages}")
 
-    new_page = request_page(username, page_counter)
-    recenttracks_raw = new_page.get("recenttracks") or {}
-    tracks = recenttracks_raw.get("track") or []
+    new_page: dict = request_page(username, page_counter)
+    recenttracks_raw: dict = new_page.get("recenttracks") or {}
+
+    tracks: List[dict] = recenttracks_raw.get("track") or []
     scrobbles_pages.append(tracks)
 
     page_counter += 1
     time.sleep(0.2)
 
 # Write the results to json file
-filename = os.path.abspath(
+filename: str = os.path.abspath(
     os.path.join(
         os.path.dirname(__file__),
         "..",
@@ -100,6 +101,8 @@ filename = os.path.abspath(
     )
 )
 log.info(f"Saving scrobbles to file: {filename}")
+
 with open(filename, "w", encoding="utf8") as sc_out:
     json.dump(scrobbles_pages, sc_out, ensure_ascii=False)
+
 log.info("DONE")
