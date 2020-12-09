@@ -83,7 +83,7 @@ class ReleaseTrack:
                     track_title=track_title,
                     track_mbid=track_mbid,
                     track_length=track_length,
-                    album_name=album_name,
+                    album_title=album_name,
                     album_mbid=album_mbid,
                 )
                 track_mbid_to_releasetrack_cache[track_mbid] = instance
