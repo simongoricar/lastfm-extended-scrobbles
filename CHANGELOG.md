@@ -1,5 +1,6 @@
 1.1
-- Added: genre lookup! (data from Last.fm tags using Beets' genre list)
+- Added: new column - genre! (data from Last.fm tags using Beets' genre list)
+- Added: new column - track love (data from Last.fm)
 - Added: scrobble data downloader (see `scripts/download-scrobbles.py`)
 - Changed: renamed spreadsheed columns to snake_case
 - Fixed: crash on corrupt audio file
