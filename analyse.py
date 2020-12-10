@@ -290,7 +290,7 @@ def find_by_metadata(
 
     # Now filter by album if possible
     if raw_scrobble.album_title not in (None, ""):
-        albums = set([a.album_name for a in current_cache_list])
+        albums = list(set([a.album_name for a in current_cache_list]))
         best_album_match: Optional[Tuple[str, int]] = extractOne(
             raw_scrobble.album_title,
             albums,
@@ -303,7 +303,7 @@ def find_by_metadata(
             current_cache_list = [a for a in current_cache_list if a.album_name == best_album_match[0]]
 
     # Finally, choose the best track by title
-    c_to_track_titles = [a.track_title for a in current_cache_list]
+    c_to_track_titles = list(set([a.track_title for a in current_cache_list]))
     best_track_match: Optional[Tuple[str, int]] = extractOne(
         raw_scrobble.track_title,
         c_to_track_titles,
