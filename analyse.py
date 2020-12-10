@@ -16,11 +16,17 @@ from youtubesearchpython import SearchVideos
 
 from core.library import LibraryFile
 from core.scrobble import ExtendedScrobble, TrackSourceType, RawScrobble
-from core.utilities import youtube_length_to_sec, get_best_attribute
+from core.utilities import youtube_length_to_sec
 from core.musicbrainz import ReleaseTrack
 from core.genres import fetch_genre_by_metadata
+from core.prevent_sleep import inhibit, uninhibit
 
 log = logging.getLogger(__name__)
+
+# Inhibit Windows system sleep, and uninhibit at the end of the script
+# Silently fails on anything but Windows
+# To make sure this is working on Windows, you can run "powercfg /requests" and look under SYSTEM
+inhibit()
 
 ##
 # 1. Build music library cache
@@ -491,3 +497,6 @@ log.info(f"Source statistics:\n"
          f"  MusicBrainz: {c_musicbrainz_hits} ({perc_musicbrainz_hits}%)\n"
          f"  YouTube: {c_youtube_hits} ({perc_youtube_hits}%)\n"
          f"  No matches, just basic data: {c_basic_info_hits} ({perc_basic_info}%)")
+
+# Uninhibit Windows system sleep
+uninhibit()
