@@ -4,6 +4,9 @@ from mutagen import FileType
 
 
 def get_mutagen_attribute(file: FileType, tag_name: str, fallback: Any = None) -> str:
+    if file.tags is None:
+        return fallback
+
     tag_raw = file.tags.get(tag_name)
 
     if type(tag_raw) is list:
