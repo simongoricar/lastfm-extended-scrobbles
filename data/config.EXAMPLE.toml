@@ -8,7 +8,8 @@ lastfm_api_secret = ""
 
 [SourcePaths]
 # Can use {DATA_DIR} as a placeholder
-scrobbles_json_path = "{DATA_DIR}/my_scrobbles.json"
+# Change this to a valid filename after downloading your scrobbles.
+scrobbles_json_path = "{DATA_DIR}/scrobbles-USERNAME-timestamp.json"
 # The root directory of your music library
 music_library_root = ""
 
