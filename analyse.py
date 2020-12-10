@@ -10,7 +10,8 @@ from typing import Optional, Dict, List, Any, Tuple
 
 from mutagen import File, FileType, MutagenError
 from openpyxl import Workbook
-from fuzzywuzzy.fuzz import ratio, partial_ratio
+# use UQRatio instead of ratio
+from fuzzywuzzy.fuzz import ratio, partial_ratio, UQRatio
 from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
 
@@ -282,7 +283,7 @@ def find_by_metadata(
     best_artist_match: Optional[Tuple[str, int]] = extractOne(
         raw_scrobble.artist_name,
         cache_list_of_artists,
-        scorer=ratio,
+        scorer=UQRatio,
         score_cutoff=config.FUZZY_MIN_ARTIST
     )
 
@@ -300,7 +301,7 @@ def find_by_metadata(
         best_album_match: Optional[Tuple[str, int]] = extractOne(
             raw_scrobble.album_title,
             albums,
-            scorer=ratio,
+            scorer=UQRatio,
             score_cutoff=config.FUZZY_MIN_ALBUM
         )
 
@@ -313,7 +314,7 @@ def find_by_metadata(
     best_track_match: Optional[Tuple[str, int]] = extractOne(
         raw_scrobble.track_title,
         c_to_track_titles,
-        scorer=ratio,
+        scorer=UQRatio,
         score_cutoff=config.FUZZY_MIN_TITLE
     )
 
