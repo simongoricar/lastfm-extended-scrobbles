@@ -2,7 +2,7 @@
 __pycache__
 
 data/*.json
-data/output*.xlsx
+data/output*.xls*
 data/~$*.xlsx
 data/config.toml
 data/cache
