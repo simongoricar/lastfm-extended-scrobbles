@@ -8,7 +8,8 @@ from .musicbrainz import ReleaseTrack
 class TrackSourceType:
     JUST_SCROBBLE = "just_scrobble_data"
     LOCAL_LIBRARY_MBID = "local_library_mbid"
-    LOCAL_LIBRARY_METADATA = "local_library_metadata"
+    LOCAL_LIBRARY_METADATA_EXACT = "local_library_metadata_exact"
+    LOCAL_LIBRARY_METADATA_PARTIAL = "local_library_metadata_partial"
     MUSICBRAINZ = "musicbrainz"
     YOUTUBE = "youtube"
 
@@ -78,7 +79,8 @@ class RawScrobble:
         )
 
     def __str__(self):
-        return f"<RawScrobble artist=\"{self.artist_name}\" album=\"{self.album_title}\" track=\"{self.track_title}\">"
+        return f"<RawScrobble artist=\"{self.artist_name}\" album=\"{self.album_title}\" " \
+               f"track=\"{self.track_title}\" track_mbid=\"{self.track_mbid}\">"
 
 
 class ExtendedScrobble:
@@ -259,7 +261,7 @@ class ExtendedScrobble:
     def spreadsheet_header() -> list:
         """
         Returns:
-            The header for other spredsheet columns.
+            The camel-cased spreadsheet column names.
         """
         return [
             "track_source",
