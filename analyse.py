@@ -10,8 +10,7 @@ from typing import Optional, Dict, List, Any, Tuple
 
 from mutagen import File, FileType, MutagenError
 from openpyxl import Workbook
-# use UQRatio instead of ratio
-from fuzzywuzzy.fuzz import ratio, partial_ratio, UQRatio
+from fuzzywuzzy.fuzz import partial_ratio, UQRatio
 from fuzzywuzzy.process import extractOne
 from youtubesearchpython import SearchVideos
 
@@ -21,25 +20,20 @@ from core.utilities import youtube_length_to_sec
 from core.musicbrainz import ReleaseTrack
 from core.genres import fetch_genre_by_metadata
 from core.prevent_sleep import inhibit, uninhibit
+from core.state import State
 
 log = logging.getLogger(__name__)
 
-# Inhibit Windows system sleep, and uninhibit at the end of the script
-# Silently fails on anything but Windows
-# To make sure this is working on Windows, you can run "powercfg /requests" and look under SYSTEM
-inhibit()
 
 ##
-# 1. Build music library cache
+# Cache the music library
 ##
-
-# 1.1) Collect audio files
-log.info("[STEP 1] Collecting audio files.")
-
-
-def find_music_library_files(root_dir: str, extensions: tuple) -> List[str]:
+def find_music_library_files(root_dir: str) -> List[str]:
     # Recursively build a list of audio files
-    globs: List[str] = [path.join(root_dir, f"**/*.{ext_glob}") for ext_glob in extensions]
+    globs: List[str] = [
+        path.join(root_dir, f"**/*.{ext_glob}")
+        for ext_glob in ("mp3", "ogg", "wav", "flac", "m4a")
+    ]
 
     files: List[str] = []
     for g in globs:
@@ -47,18 +41,6 @@ def find_music_library_files(root_dir: str, extensions: tuple) -> List[str]:
 
     files.sort()
     return files
-
-
-audio_files = find_music_library_files(
-    config.MUSIC_LIBRARY_ROOT,
-    ("mp3", "ogg", "wav", "flac", "m4a")
-)
-audio_files_amount = len(audio_files)
-
-log.info(f"Collected {audio_files_amount} audio files.")
-
-# 1.2) Build audio metadata cache if needed (otherwise just load the previous one)
-t_start = time.time()
 
 
 def build_library_metadata_cache(file_list: List[str]):
@@ -171,88 +153,111 @@ def save_library_metadata(raw: Dict[str, Dict[str, Any]]):
         )
 
 
-# If a cache already exists, load it
-# TODO switch to ignore cache? (deleting the cache file also works for now)
-if path.isfile(config.LIBRARY_CACHE_FILE):
-    log.info("Local music library cache found, loading.")
-    raw_cache = load_library_metadata()
-    log.info("Local music library cache loaded.")
-elif config.LIBRARY_CACHE_FILE != "":
-    log.info("Building local music library cache...")
-    raw_cache = build_library_metadata_cache(audio_files)
-    save_library_metadata(raw_cache)
-else:
-    raw_cache = {"cache_by_album": [], "cache_by_artist": [], "cache_by_track_title": [], "cache_by_track_mbid": []}
-    log.info("Local music library search is disabled.")
+def ensure_library_cache(state: State):
+    """
+    Makes sure the music library cache exists.
+    Generates one if needed, otherwise loads from file.
 
-# At this point, raw_cache has all the stuff we need
-# So we separate it into smaller chunks for later use
-cache_by_album: Dict[str, List[LibraryFile]] = raw_cache["cache_by_album"]
-cache_by_artist: Dict[str, List[LibraryFile]] = raw_cache["cache_by_artist"]
-cache_by_track_title: Dict[str, List[LibraryFile]] = raw_cache["cache_by_track_title"]
-cache_by_track_mbid: Dict[str, LibraryFile] = raw_cache["cache_by_track_mbid"]
+    Args:
+        state:
+            State instance to save the cache into.
 
-# Now build some more cache
-cache_list_of_albums: List[str] = [str(a) for a in cache_by_album.keys()]
-cache_list_of_artists: List[str] = [str(a) for a in cache_by_artist.keys()]
-cache_list_of_track_titles: List[str] = [str(a) for a in cache_by_track_title.keys()]
+            Keys that are saved (all but one are of type Dict[str, List[LibraryFile]]):
+                - cache_by_album (keys are album titles)
+                - cache_by_artist (keys are artist names)
+                - cache_by_track_title (keys are track titles)
+                - cache_by_track_mbid (keys are track MBIDs)
+                    This is the only attribute that is Dict[str, LibraryFile].
+    """
+    # Build audio metadata cache if needed (otherwise just load the json cache)
+    t_start = time.time()
 
-t_total = round(time.time() - t_start, 1)
-log.info(f"Local library cache took {t_total}s")
+    # If a cache already exists, load it
+    # TODO switch to ignore cache? (deleting the cache file also works for now)
+    if path.isfile(config.LIBRARY_CACHE_FILE):
+        log.info("Local music library cache found, loading.")
+        raw_cache = load_library_metadata()
+        log.info("Local music library cache loaded.")
+    elif config.LIBRARY_CACHE_FILE not in (None, ""):
+        log.info("Collecting audio files...")
+        file_list: List[str] = find_music_library_files(config.MUSIC_LIBRARY_ROOT)
+        log.info(f"Collected {len(file_list)} audio files.")
+
+        log.info("Building local music library cache...")
+        raw_cache = build_library_metadata_cache(file_list)
+        save_library_metadata(raw_cache)
+    else:
+        raw_cache = {"cache_by_album": [], "cache_by_artist": [], "cache_by_track_title": [], "cache_by_track_mbid": []}
+        log.info("Local music library search is disabled.")
+
+    # At this point, raw_cache has all the stuff we need
+    # So we separate it into smaller chunks for saving into state
+
+    # All Dict[str, List[LibraryFile]]
+    state.cache_by_album = raw_cache["cache_by_album"]
+    state.cache_by_artist = raw_cache["cache_by_artist"]
+    state.cache_by_track_title = raw_cache["cache_by_track_title"]
+    # Dict[str, LibraryFile]
+    state.cache_by_track_mbid = raw_cache["cache_by_track_mbid"]
+
+    # Build a little bit more cache
+    # TODO make a module for all these caches
+
+    # All are List[str]
+    state.cache_list_of_albums = [str(a) for a in state.cache_by_album.keys()]
+    state.cache_list_of_artists = [str(a) for a in state.cache_by_artist.keys()]
+    # TODO cache_list_of_track_titles -> cache_list_of_tracks
+    state.cache_list_of_tracks = [str(a) for a in state.cache_by_track_title.keys()]
+
+    # cache_list_of_albums: List[str] = [str(a) for a in cache_by_album.keys()]
+    # cache_list_of_artists: List[str] = [str(a) for a in cache_by_artist.keys()]
+    # cache_list_of_track_titles: List[str] = [str(a) for a in cache_by_track_title.keys()]
+
+    t_total = round(time.time() - t_start, 1)
+    log.info(f"Local library cache took {t_total}s")
+
 
 ##
-# 2. Load scrobbles
+# Scrobbles
 ##
-log.info("[STEP 2] Loading scrobbles file...")
-t_start = time.time()
+def load_scrobbles(state: State):
+    """
+    Load the scrobbles file into JSON and flatten it.
 
+    Args:
+        state:
+            State instance to save the scrobbles into.
+            Keys:
+                - scrobbles (type: List[Dict[Any, Any]])
+    """
+    def load_and_flatten(json_file_path: str) -> List:
+        with open(json_file_path, "r", encoding="utf8") as scrobbles_file:
+            scrobbles_raw = load(scrobbles_file)
 
-# TODO data from the tools linked in readme doesn't include the extended data (loved tracks)
-#   Look into getting that data as well
-#   Maybe lastfm-extended-scrobbles could download that data for you as well
-#   so you don't need to depend on external sources?
-def load_scrobbles(json_file_path: str) -> List:
-    with open(json_file_path, "r", encoding="utf8") as scrobbles_file:
-        scrobbles_raw = load(scrobbles_file)
+        # Flatten scrobble pages into a big list
+        flattened = [item for sublist in scrobbles_raw for item in sublist]
+        return flattened
 
-    # 2.1) Flatten scrobble pages
-    flattened = [item for sublist in scrobbles_raw for item in sublist]
-    return flattened
+    log.info("[STEP 2] Loading scrobbles file...")
+    t_start = time.time()
 
+    # TODO option to filter scrobbles by date (from, to)
+    scrobbles = load_and_flatten(config.SCROBBLES_JSON_PATH)
+    # Save into state
+    state.scrobbles = scrobbles
 
-# TODO option to filter scrobbles by date (from, to)
-scrobbles = load_scrobbles(config.SCROBBLES_JSON_PATH)
-scrobbles_len = len(scrobbles)
+    t_total = round(time.time() - t_start, 1)
+    log.info(f"Scrobbles file read and parsed in {t_total}s")
+    log.info(f"{len(scrobbles)} scrobbles loaded.")
 
-t_total = round(time.time() - t_start, 1)
-log.info(f"Scrobbles file read and parsed in {t_total}s")
-log.info(f"{scrobbles_len} scrobbles loaded.")
 
 ##
-# 3. Generate data and dump it into a spreadsheet
+# Extended data
 ##
-log.info("[STEP 3] Generating extended data...")
-t_start = time.time()
-
-# Create an openpyxl workbook and the data sheet
-xl_workbook = Workbook()
-sheet = xl_workbook.active
-sheet.title = "Data"
-
-# Search caches
-# This cache really pays off if the tracks repeat (over a longer period of time for example)
-# TODO implement a better cache than this
-#   cache should probably carry over restarts, but we need a TTL
-
-# Dict[query, duration]
-youtube_cache_by_query: Dict[str, int] = {}
-# Dict[(title, album, artist), LibraryFile]
-local_cache_by_partial_metadata: Dict[Tuple[str, str, str], Optional[LibraryFile]] = {}
-
 
 # Define search functions
-def find_by_mbid(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
-    library_track = cache_by_track_mbid.get(raw_scrobble.track_mbid)
+def find_by_mbid(state: State, raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
+    library_track = state.cache_by_track_mbid.get(raw_scrobble.track_mbid)
 
     if library_track is None:
         return None
@@ -260,10 +265,10 @@ def find_by_mbid(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
         return ExtendedScrobble.from_library_track(raw_scrobble, library_track, TrackSourceType.LOCAL_LIBRARY_MBID)
 
 
-def _find_by_metadata_full_match(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
-    if raw_scrobble.track_title in cache_by_track_title:
+def _find_by_metadata_full_match(state: State, raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
+    if raw_scrobble.track_title in state.cache_by_track_title:
         # First, match by track title, then filter by artist and album if possible
-        track_matches: List[LibraryFile] = cache_by_track_title[raw_scrobble.track_title]
+        track_matches: List[LibraryFile] = state.cache_by_track_title[raw_scrobble.track_title]
 
         if len(track_matches) < 1:
             return None
@@ -300,12 +305,15 @@ def _find_by_metadata_full_match(raw_scrobble: RawScrobble) -> Optional[Extended
     return None
 
 
-def _find_by_metadata_partial_match(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
+def _find_by_metadata_partial_match(
+        state: State,
+        raw_scrobble: RawScrobble
+) -> Optional[ExtendedScrobble]:
     # Use cached result if possible
     caching_tuple = (raw_scrobble.track_title, raw_scrobble.album_title, raw_scrobble.artist_name)
-    if caching_tuple in local_cache_by_partial_metadata:
+    if caching_tuple in state.local_cache_by_partial_metadata:
         log.debug("_find_by_metadata_partial_match: cache hit")
-        track: Optional[LibraryFile] = local_cache_by_partial_metadata[caching_tuple]
+        track: Optional[LibraryFile] = state.local_cache_by_partial_metadata[caching_tuple]
 
         if track is None:
             return None
@@ -316,18 +324,18 @@ def _find_by_metadata_partial_match(raw_scrobble: RawScrobble) -> Optional[Exten
     # Start by filtering to the closest artist name match
     best_artist_match: Optional[Tuple[str, int]] = extractOne(
         raw_scrobble.artist_name,
-        cache_list_of_artists,
+        state.cache_list_of_artists,
         scorer=UQRatio,
         score_cutoff=config.FUZZY_MIN_ARTIST
     )
 
     # Edge case: if no match can be found, we should stop
     if best_artist_match is None:
-        local_cache_by_partial_metadata[caching_tuple] = None
+        state.local_cache_by_partial_metadata[caching_tuple] = None
         return None
 
     # Otherwise, build a list of LibraryFiles for further filtering
-    current_cache_list: List[LibraryFile] = cache_by_artist[best_artist_match[0]]
+    current_cache_list: List[LibraryFile] = state.cache_by_artist[best_artist_match[0]]
 
     # Now filter by album if possible
     if raw_scrobble.album_title not in (None, ""):
@@ -354,7 +362,7 @@ def _find_by_metadata_partial_match(raw_scrobble: RawScrobble) -> Optional[Exten
 
     # Edge case: no title match, exit here
     if best_track_match is None:
-        local_cache_by_partial_metadata[caching_tuple] = None
+        state.local_cache_by_partial_metadata[caching_tuple] = None
         return None
 
     # Otherwise build a ExtendedScrobble with this information
@@ -364,6 +372,7 @@ def _find_by_metadata_partial_match(raw_scrobble: RawScrobble) -> Optional[Exten
 
 
 def find_by_metadata(
+        state: State,
         raw_scrobble: RawScrobble,
 ) -> Optional[ExtendedScrobble]:
     # TODO decorator for caching the results
@@ -373,13 +382,13 @@ def find_by_metadata(
     #######
     # 1) Try full match first
     #######
-    sc: Optional[ExtendedScrobble] = _find_by_metadata_full_match(raw_scrobble)
+    sc: Optional[ExtendedScrobble] = _find_by_metadata_full_match(state, raw_scrobble)
 
     #######
     # 2) Try a partial match
     #######
     if sc is None:
-        sc = _find_by_metadata_partial_match(raw_scrobble)
+        sc = _find_by_metadata_partial_match(state, raw_scrobble)
 
     return sc
 
@@ -395,14 +404,15 @@ def find_on_musicbrainz(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]
 
 
 def find_on_youtube(
+        state: State,
         raw_scrobble: RawScrobble
 ) -> Optional[ExtendedScrobble]:
     # Search YouTube for the closest "artist title" match
     query = f"{raw_scrobble.artist_name} {raw_scrobble.album_title} {raw_scrobble.track_title}"
 
-    if query in youtube_cache_by_query:
+    if query in state.youtube_cache_by_query:
         log.debug("YouTube: using cached search")
-        duration_sec = youtube_cache_by_query[query]
+        duration_sec = state.youtube_cache_by_query[query]
     else:
         search = SearchVideos(query, mode="list", max_results=8)
 
@@ -425,24 +435,13 @@ def find_on_youtube(
         duration_human = search.durations[index]
         duration_sec = youtube_length_to_sec(duration_human)
 
-        youtube_cache_by_query[query] = duration_sec
+        state.youtube_cache_by_query[query] = duration_sec
 
     return ExtendedScrobble.from_youtube(raw_scrobble, duration_sec)
 
 
-# Append the header
-sheet.append(ExtendedScrobble.spreadsheet_header())
-
-# Go through every scrobble and append a row for each entry
-c_local_mbid_hits = 0
-c_local_metadata_hits = 0
-c_musicbrainz_hits = 0
-c_youtube_hits = 0
-c_basic_info_hits = 0
-
-c = 0
-for scrobble_raw_data in scrobbles:
-    rs: RawScrobble = RawScrobble.from_raw_data(scrobble_raw_data)
+def process_single_scrobble(state: State, raw_data: Dict[Any, Any]) -> ExtendedScrobble:
+    rs: RawScrobble = RawScrobble.from_raw_data(raw_data)
 
     #########
     # STEP 1: Find source
@@ -457,20 +456,20 @@ for scrobble_raw_data in scrobbles:
     # Try local track mbid search
     if rs.track_mbid is not None:
         # Look up the track in cache via mbid
-        scrobble = find_by_mbid(rs)
+        scrobble = find_by_mbid(state, rs)
         if scrobble is not None:
             log.debug(f"Match by MBID (local library): "
                       f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
-            c_local_mbid_hits += 1
+            state.c_local_mbid_hits += 1
 
     # Try local metadata search
     if scrobble is None and rs.track_title is not None:
-        scrobble = find_by_metadata(rs)
+        scrobble = find_by_metadata(state, rs)
 
         if scrobble is not None:
             log.debug(f"Match by metadata (local library): "
                       f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
-            c_local_metadata_hits += 1
+            state.c_local_metadata_hits += 1
 
     # Try MusicBrainz
     if scrobble is None and rs.track_mbid is not None:
@@ -479,23 +478,23 @@ for scrobble_raw_data in scrobbles:
         if scrobble is not None:
             log.debug(f"Match by MBID (MusicBrainz): "
                       f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
-            c_musicbrainz_hits += 1
+            state.c_musicbrainz_hits += 1
 
     # Try youtube search
     if scrobble is None:
         log.debug("Trying YouTube search.")
-        scrobble = find_on_youtube(rs)
+        scrobble = find_on_youtube(state, rs)
 
         if scrobble is not None:
             log.debug(f"Match by metadata (YouTube): "
                       f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
-            c_youtube_hits += 1
+            state.c_youtube_hits += 1
 
     # If absolutely no match can be found, create a fallback scrobble with just the basic data
     if scrobble is None:
         log.debug("No match, using basic scrobble data.")
         scrobble = ExtendedScrobble.from_basic_data(rs)
-        c_basic_info_hits += 1
+        state.c_basic_info_hits += 1
 
     #########
     # STEP 2: Find genre if needed
@@ -510,50 +509,155 @@ for scrobble_raw_data in scrobbles:
         )
         scrobble.genre_list = genres
 
-    # TODO add a "loved track" column
-    # Finally, dump this scrobble data into the next spreadsheet row
-    sheet.append(scrobble.to_spreadsheet_list())
-
-    # Log progress
-    c += 1
-    if c % config.PARSE_LOG_INTERVAL == 0:
-        log.info(f"Parsing progress: {c} scrobbles ({round(c / scrobbles_len * 100, 1)}%)")
+    return scrobble
 
 
-# Save the workbook to the configured path
-c = 0
-written = False
+def generate_extended_data(state: State):
+    """
+    Generate extended scrobble data from the available scrobbles.
+    Saves the data into a spreadsheet (location determined by configuration file).
 
-while c < 5:
-    try:
-        xl_workbook.save(filename=config.XLSX_OUTPUT_PATH)
-        written = True
-        break
-    except PermissionError:
-        log.warning("PermissionError while trying to open spreadsheet file, retrying in 5 seconds.")
-        time.sleep(5)
-        c += 1
+    Args:
+        state:
+            State instance to read scrobbles and cache from.
 
-if written is False:
-    log.critical(f"Failed to write spreadsheet file to \"{config.XLSX_OUTPUT_PATH}\" after 5 retries.")
-    exit(1)
+            Expected keys already in state:
+                - cache_by_album (type: Dict[str, List[LibraryFile])
+                - cache_by_artist (type: Dict[str, List[LibraryFile])
+                - cache_by_track_title (type: Dict[str, List[LibraryFile])
+                - cache_by_track_mbid (type: Dict[str, LibraryFile])
+                - scrobbles (type: List[Dict[Any, Any]])
 
-t_total = round(time.time() - t_start, 1)
-log.info(f"Spreadsheet generated and saved in {t_total}s")
-log.info(f"Spreadsheet location: \"{config.XLSX_OUTPUT_PATH}\"")
+            Appends the following keys to state:
+                - youtube_cache_by_query (type: Dict[str, int])
+                - local_cache_by_partial_metadata (type: Dict[Tuple[str, str, str], LibraryFile])
+                - c_local_mbid_hits (type: int)
+                - c_local_metadata_hits (type: int)
+                - c_musicbrainz_hits (type: int)
+                - c_youtube_hits (type: int)
+                - c_basic_info_hits (type: int)
+    """
+    log.info("[STEP 3] Generating extended data...")
+    t_start = time.time()
 
-perc_local_mbid_hits = round(c_local_mbid_hits / scrobbles_len * 100, 1)
-perc_local_metadata_hits = round(c_local_metadata_hits / scrobbles_len * 100, 1)
-perc_musicbrainz_hits = round(c_musicbrainz_hits / scrobbles_len * 100, 1)
-perc_youtube_hits = round(c_youtube_hits / scrobbles_len * 100, 1)
-perc_basic_info = round(c_basic_info_hits / scrobbles_len * 100, 1)
+    scrobbles_len = len(state.scrobbles)
 
-log.info(f"Source statistics:\n"
-         f"  Local library (MBID): {c_local_mbid_hits} ({perc_local_mbid_hits}%)\n"
-         f"  Local library (metadata): {c_local_metadata_hits} ({perc_local_metadata_hits}%)\n"
-         f"  MusicBrainz: {c_musicbrainz_hits} ({perc_musicbrainz_hits}%)\n"
-         f"  YouTube: {c_youtube_hits} ({perc_youtube_hits}%)\n"
-         f"  No matches, just basic data: {c_basic_info_hits} ({perc_basic_info}%)")
+    # Create an openpyxl workbook and the data sheet
+    xl_workbook = Workbook()
+    sheet = xl_workbook.active
+    sheet.title = "Data"
 
-# Uninhibit Windows system sleep
-uninhibit()
+
+    # Set up search cache
+    # This really pays off if the tracks repeat (over a longer period of time for example)
+    # TODO implement a better cache than this
+    #   cache should probably carry over restarts, but we need a TTL
+
+    # TODO cache setup to a separate function
+    # Dict[query, duration] (Dict[str, int])
+    state.youtube_cache_by_query = {}
+    # Dict[(title, album, artist), LibraryFile]
+    state.local_cache_by_partial_metadata = {}
+
+    # Append the header
+    sheet.append(ExtendedScrobble.spreadsheet_header())
+
+    # Count different hit types for statistics at the end
+    state.c_local_mbid_hits = 0
+    state.c_local_metadata_hits = 0
+    state.c_musicbrainz_hits = 0
+    state.c_youtube_hits = 0
+    state.c_basic_info_hits = 0
+
+    c = 0
+    # Go through every scrobble and append a row for each entry
+    for scrobble_raw_data in state.scrobbles:
+        try:
+            extended_scrobble: ExtendedScrobble = process_single_scrobble(state, scrobble_raw_data)
+        except Exception as e:
+            log.warning(f"Failed to process scrobble ({e}): \"{scrobble_raw_data}\"")
+        else:
+            sheet.append(extended_scrobble.to_spreadsheet_list())
+
+            # Log progress
+            c += 1
+            if c % config.PARSE_LOG_INTERVAL == 0:
+                log.info(f"Parsing progress: {c} scrobbles "
+                         f"({round(c / scrobbles_len * 100, 1)}%)")
+
+    # Save the workbook to the configured path
+    retries = 0
+    written = False
+
+    while retries < 5:
+        try:
+            xl_workbook.save(filename=config.XLSX_OUTPUT_PATH)
+            written = True
+            break
+        except PermissionError:
+            log.warning("PermissionError while trying to open spreadsheet file, retrying in 5 seconds.")
+            time.sleep(5)
+            retries += 1
+
+    if written is False:
+        log.critical(f"Failed to write spreadsheet file to \"{config.XLSX_OUTPUT_PATH}\" after 5 retries.")
+        exit(1)
+
+    t_total = round(time.time() - t_start, 1)
+    log.info(f"Spreadsheet generated and saved in {t_total}s")
+    log.info(f"Spreadsheet location: \"{config.XLSX_OUTPUT_PATH}\"")
+
+
+def print_end_stats(state: State):
+    scrobbles_len = len(state.scrobbles)
+    c_local_mbid_hits = state.c_local_mbid_hits
+    c_local_metadata_hits = state.c_local_metadata_hits
+    c_musicbrainz_hits = state.c_musicbrainz_hits
+    c_youtube_hits = state.c_youtube_hits
+    c_basic_info_hits = state.c_basic_info_hits
+
+    perc_local_mbid_hits = round(c_local_mbid_hits / scrobbles_len * 100, 1)
+    perc_local_metadata_hits = round(c_local_metadata_hits / scrobbles_len * 100, 1)
+    perc_musicbrainz_hits = round(c_musicbrainz_hits / scrobbles_len * 100, 1)
+    perc_youtube_hits = round(c_youtube_hits / scrobbles_len * 100, 1)
+    perc_basic_info = round(c_basic_info_hits / scrobbles_len * 100, 1)
+
+    log.info(f"Source statistics:\n"
+             f"  Local library (MBID): {c_local_mbid_hits} ({perc_local_mbid_hits}%)\n"
+             f"  Local library (metadata): {c_local_metadata_hits} ({perc_local_metadata_hits}%)\n"
+             f"  MusicBrainz: {c_musicbrainz_hits} ({perc_musicbrainz_hits}%)\n"
+             f"  YouTube: {c_youtube_hits} ({perc_youtube_hits}%)\n"
+             f"  No matches, just basic data: {c_basic_info_hits} ({perc_basic_info}%)")
+
+
+def main():
+    """
+    Main entry point
+    """
+    # Inhibit Windows system sleep, and uninhibit at the end of the script
+    # Silently fails on anything but Windows
+    # To make sure this is working on Windows, you can run "powercfg /requests" and look under SYSTEM
+    inhibit()
+
+    global_state: State = State("main_state")
+
+    # TODO move logging from specific functions into main?
+    ##
+    # 1) Load/generate the library cache and scrobbles
+    ##
+    # ensure_library_cache will fill the above state
+    ensure_library_cache(global_state)
+    load_scrobbles(global_state)
+
+    ##
+    # 2) Generate and save the extended data
+    ##
+    generate_extended_data(global_state)
+    print_end_stats(global_state)
+
+    # Uninhibit Windows system sleep
+    uninhibit()
+
+
+if __name__ == '__main__':
+    main()

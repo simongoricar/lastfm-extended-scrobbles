@@ -1,7 +1,7 @@
 import logging
 from os import path, mkdir
 from toml import load
-from typing import Any
+from typing import Any, Optional
 
 from .exception import ConfigException
 
@@ -97,68 +97,72 @@ class AnalysisConfig:
         ##########
         # Authentication
         ##########
-        self.LASTFM_API_KEY = self._table_authentication.get("lastfm_api_key")
-        self.LASTFM_API_SECRET = self._table_authentication.get("lastfm_api_secret")
+        self.LASTFM_API_KEY: str = self._table_authentication.get("lastfm_api_key")
+        self.LASTFM_API_SECRET: str = self._table_authentication.get("lastfm_api_secret")
 
         ##########
         # SourcePaths
         ##########
-        SCROBBLES_JSON = self._table_source_paths.get("scrobbles_json_path").format(
+        SCROBBLES_JSON: str = self._table_source_paths.get("scrobbles_json_path").format(
             DATA_DIR=DATA_DIR
         )
-        self.SCROBBLES_JSON_PATH = path.abspath(SCROBBLES_JSON)
-        self.MUSIC_LIBRARY_ROOT = path.abspath(self._table_source_paths.get("music_library_root"))
+        self.SCROBBLES_JSON_PATH: str = path.abspath(SCROBBLES_JSON)
+        self.MUSIC_LIBRARY_ROOT: str = path.abspath(self._table_source_paths.get("music_library_root"))
 
         ##########
         # DestinationPaths
         ##########
-        XLSX_OUTPUT_PATH = path.abspath(self._table_dest_paths.get("xlsx_ouput_path").format(
+        XLSX_OUTPUT_PATH: str = path.abspath(self._table_dest_paths.get("xlsx_ouput_path").format(
             DATA_DIR=DATA_DIR
         ))
-        self.XLSX_OUTPUT_PATH = XLSX_OUTPUT_PATH
+        self.XLSX_OUTPUT_PATH: str = XLSX_OUTPUT_PATH
 
         ##########
         # Cache
         ##########
-        self.CACHE_DIR = path.abspath(self._table_cache.get("cache_dir").format(
+        self.CACHE_DIR: str = path.abspath(self._table_cache.get("cache_dir").format(
             DATA_DIR=DATA_DIR
         ))
         if not path.isdir(self.CACHE_DIR):
             log.info(f"Creating cache directory: '{self.CACHE_DIR}'")
             mkdir(self.CACHE_DIR)
 
-        self.LIBRARY_CACHE_FILE = path.abspath(self._table_cache.get("library_cache_file").format(
+        lib_cache_path: str = self._table_cache.get("library_cache_file").format(
             DATA_DIR=DATA_DIR,
             CACHE_DIR=self.CACHE_DIR
-        ))
+        )
+        self.LIBRARY_CACHE_FILE: Optional[str] = \
+            path.abspath(lib_cache_path) \
+            if lib_cache_path not in (None, "") \
+            else None
 
         ##########
         # Logging
         ##########
-        verbosity = self._table_logging.get("verbosity", "").lower()
-        self.VERBOSITY = logging_name_to_level.get(verbosity)
+        verbosity: str = self._table_logging.get("verbosity", "").lower()
+        self.VERBOSITY: int = logging_name_to_level.get(verbosity)
         if self.VERBOSITY is None:
             log.warning("verbosity was not set properly, falling back to \"info\"")
             self.VERBOSITY = logging.INFO
 
-        self.CACHE_LOG_INTERVAL = int(self._table_logging.get("cache_log_interval"))
-        self.PARSE_LOG_INTERVAL = int(self._table_logging.get("parse_log_interval"))
+        self.CACHE_LOG_INTERVAL: int = int(self._table_logging.get("cache_log_interval"))
+        self.PARSE_LOG_INTERVAL: int = int(self._table_logging.get("parse_log_interval"))
 
         ##########
         # FuzzyMacthing
         ##########
-        self.FUZZY_MIN_TITLE = int(self._table_fuzzy.get("local_library_title_min_match"))
-        self.FUZZY_MIN_ALBUM = int(self._table_fuzzy.get("local_library_album_min_match"))
-        self.FUZZY_MIN_ARTIST = int(self._table_fuzzy.get("local_library_artist_min_match"))
-        self.FUZZY_YOUTUBE_MIN_TITLE = int(self._table_fuzzy.get("youtube_title_min_match"))
+        self.FUZZY_MIN_TITLE: int = int(self._table_fuzzy.get("local_library_title_min_match"))
+        self.FUZZY_MIN_ALBUM: int = int(self._table_fuzzy.get("local_library_album_min_match"))
+        self.FUZZY_MIN_ARTIST: int = int(self._table_fuzzy.get("local_library_artist_min_match"))
+        self.FUZZY_YOUTUBE_MIN_TITLE: int = int(self._table_fuzzy.get("youtube_title_min_match"))
 
         ##########
         # Genres
         ##########
-        self.MIN_TAG_WEIGHT = int(self._table_genres.get("min_tag_weight"))
-        self.MIN_LASTFM_SIMILARITY = int(self._table_genres.get("min_lastfm_suggestion_similarity"))
-        self.MAX_LASTFM_PAGES = int(self._table_genres.get("max_lastfm_pages"))
-        self.MAX_GENRE_COUNT = int(self._table_genres.get("max_genre_count"))
+        self.MIN_TAG_WEIGHT: int = int(self._table_genres.get("min_tag_weight"))
+        self.MIN_LASTFM_SIMILARITY: int = int(self._table_genres.get("min_lastfm_suggestion_similarity"))
+        self.MAX_LASTFM_PAGES: int = int(self._table_genres.get("max_lastfm_pages"))
+        self.MAX_GENRE_COUNT: int = int(self._table_genres.get("max_genre_count"))
         # self.GENRES_USE_SPECIFIC = self._table_genres.get("use_most_specific")
 
 
