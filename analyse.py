@@ -247,7 +247,7 @@ sheet.title = "Data"
 # Dict[query, duration]
 youtube_cache_by_query: Dict[str, int] = {}
 # Dict[(title, album, artist), LibraryFile]
-local_library_cache_by_metadata: Dict[Tuple[str, str, str], Optional[LibraryFile]] = {}
+local_cache_by_partial_metadata: Dict[Tuple[str, str, str], Optional[LibraryFile]] = {}
 
 
 # Define search functions
@@ -260,25 +260,59 @@ def find_by_mbid(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
         return ExtendedScrobble.from_library_track(raw_scrobble, library_track, TrackSourceType.LOCAL_LIBRARY_MBID)
 
 
-def find_by_metadata(
-        raw_scrobble: RawScrobble,
-) -> Optional[ExtendedScrobble]:
-    # TODO decorator for caching the results
-    # Find the best title, album and artist match in the local library cache
-    # TODO use filename as fallback
+def _find_by_metadata_full_match(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
+    if raw_scrobble.track_title in cache_by_track_title:
+        # First, match by track title, then filter by artist and album if possible
+        track_matches: List[LibraryFile] = cache_by_track_title[raw_scrobble.track_title]
 
+        if len(track_matches) < 1:
+            return None
+        elif len(track_matches) == 1:
+            return ExtendedScrobble.from_library_track(
+                raw_scrobble, track_matches[0], TrackSourceType.LOCAL_LIBRARY_METADATA
+            )
+
+        # First: by artist
+        track_matches = [m for m in track_matches if m.artist_name == raw_scrobble.artist_name]
+
+        if len(track_matches) < 1:
+            return None
+        elif len(track_matches) == 1:
+            return ExtendedScrobble.from_library_track(
+                raw_scrobble, track_matches[0], TrackSourceType.LOCAL_LIBRARY_METADATA
+            )
+
+        # Then: by album
+        track_matches = [m for m in track_matches if m.album_name == raw_scrobble.album_title]
+
+        if len(track_matches) < 1:
+            return None
+        elif len(track_matches) == 1:
+            return ExtendedScrobble.from_library_track(
+                raw_scrobble, track_matches[0], TrackSourceType.LOCAL_LIBRARY_METADATA
+            )
+        else:
+            # Still multiple matches
+            log.warning(f"Multiple matches when trying full metadata match, returning None. "
+                        f"(\"{raw_scrobble}\" fully matches: {track_matches})")
+            return None
+
+    return None
+
+
+def _find_by_metadata_partial_match(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
     # Use cached result if possible
     caching_tuple = (raw_scrobble.track_title, raw_scrobble.album_title, raw_scrobble.artist_name)
-    if caching_tuple in local_library_cache_by_metadata:
-        log.debug("find_by_metadata: cache hit")
-        track: Optional[LibraryFile] = local_library_cache_by_metadata[caching_tuple]
+    if caching_tuple in local_cache_by_partial_metadata:
+        log.debug("_find_by_metadata_partial_match: cache hit")
+        track: Optional[LibraryFile] = local_cache_by_partial_metadata[caching_tuple]
 
         if track is None:
             return None
         else:
             return ExtendedScrobble.from_library_track(raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA)
 
-    log.debug("find_by_metadata: cache miss")
+    log.debug("_find_by_metadata_partial_match: cache miss")
     # Start by filtering to the closest artist name match
     best_artist_match: Optional[Tuple[str, int]] = extractOne(
         raw_scrobble.artist_name,
@@ -289,7 +323,7 @@ def find_by_metadata(
 
     # Edge case: if no match can be found, we should stop
     if best_artist_match is None:
-        local_library_cache_by_metadata[caching_tuple] = None
+        local_cache_by_partial_metadata[caching_tuple] = None
         return None
 
     # Otherwise, build a list of LibraryFiles for further filtering
@@ -297,7 +331,7 @@ def find_by_metadata(
 
     # Now filter by album if possible
     if raw_scrobble.album_title not in (None, ""):
-        albums = list(set([a.album_name for a in current_cache_list]))
+        albums: List[str] = list(set([str(a.album_name) for a in current_cache_list]))
         best_album_match: Optional[Tuple[str, int]] = extractOne(
             raw_scrobble.album_title,
             albums,
@@ -310,7 +344,7 @@ def find_by_metadata(
             current_cache_list = [a for a in current_cache_list if a.album_name == best_album_match[0]]
 
     # Finally, choose the best track by title
-    c_to_track_titles = list(set([a.track_title for a in current_cache_list]))
+    c_to_track_titles = list(set([str(a.track_title) for a in current_cache_list]))
     best_track_match: Optional[Tuple[str, int]] = extractOne(
         raw_scrobble.track_title,
         c_to_track_titles,
@@ -320,13 +354,35 @@ def find_by_metadata(
 
     # Edge case: no title match, exit here
     if best_track_match is None:
-        local_library_cache_by_metadata[caching_tuple] = None
+        local_cache_by_partial_metadata[caching_tuple] = None
         return None
 
     # Otherwise build a ExtendedScrobble with this information
     final_track = current_cache_list[c_to_track_titles.index(best_track_match[0])]
 
     return ExtendedScrobble.from_library_track(raw_scrobble, final_track, TrackSourceType.LOCAL_LIBRARY_METADATA)
+
+
+def find_by_metadata(
+        raw_scrobble: RawScrobble,
+) -> Optional[ExtendedScrobble]:
+    # TODO decorator for caching the results
+    # Find the best title, album and artist match in the local library cache
+    # TODO use filename as fallback
+
+    #######
+    # 1) Try full match first
+    #######
+    sc: Optional[ExtendedScrobble] = _find_by_metadata_full_match(raw_scrobble)
+
+    #######
+    # 2) Try a partial match
+    #######
+    if sc is None:
+        sc = _find_by_metadata_partial_match(raw_scrobble)
+
+    return sc
+
 
 
 def find_on_musicbrainz(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
