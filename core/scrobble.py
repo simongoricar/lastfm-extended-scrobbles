@@ -254,6 +254,10 @@ class ExtendedScrobble:
             genre_list=None,
         )
 
+    def __str__(self):
+        return f"<ExtendedScrobble source=\"{self.track_source}\" " \
+               f"artist=\"{self.artist_name}\" album=\"{self.album_name}\" track=\"{self.track_title}\">"
+
     ########################
     # Spreadsheet formatter
     ########################

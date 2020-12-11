@@ -572,20 +572,15 @@ def process_single_scrobble(
     # Try MusicBrainz
     if scrobble is None and rs.track_mbid is not None:
         scrobble = find_on_musicbrainz(rs)
-
         if scrobble is not None:
-            log.debug(f"Match by MBID (MusicBrainz): "
-                      f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
+            log.debug(f"Match by MBID (MusicBrainz): {rs}")
             stats.musicbrainz_hits += 1
 
     # Try youtube search
     if scrobble is None:
-        log.debug("Trying YouTube search.")
         scrobble = find_on_youtube(search_cache, rs)
-
         if scrobble is not None:
-            log.debug(f"Match by metadata (YouTube): "
-                      f"{rs.artist_name} - {rs.album_title} - {rs.track_title} ({rs.track_mbid})")
+            log.debug(f"Match by metadata (YouTube): {rs}")
             stats.youtube_hits += 1
 
     # If absolutely no match can be found, create a fallback scrobble with just the basic data
