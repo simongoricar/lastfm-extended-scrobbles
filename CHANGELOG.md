@@ -1,5 +1,6 @@
 1.2
 - Added: exact metadata match (if this one fails, we try partial match as previously)
+- Changed: improved output file naming (timestamped name, adds a random suffix if about to overwrite)
 - Changed: now using unicode quick ratio for partial matches
 - Changed: a bunch of internal optimisations, added stability and code cleanup
 - Fixed: fix crash on missing audio file tags
