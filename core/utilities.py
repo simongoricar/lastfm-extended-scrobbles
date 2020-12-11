@@ -1,4 +1,6 @@
 import time
+import random
+import string
 from typing import Any, Dict, Optional, Tuple, Callable
 
 from mutagen import FileType
@@ -80,6 +82,23 @@ def get_best_attribute(item: Dict[str, Optional[str]], keys: Tuple, fallback: An
             return value
 
     return fallback
+
+
+def generate_random_filename_safe_text(length: int = 4) -> str:
+    """
+    Generates a (not cryptographically safe) random filename-safe string.
+
+    Args:
+        length:
+            Length of the random text.
+
+    Returns:
+        Generated text.
+    """
+    return "".join([
+        random.choice(string.ascii_letters + string.digits)
+        for _ in range(length)
+    ])
 
 
 class TimedContext:

@@ -5,6 +5,7 @@ logging.basicConfig(level=config.VERBOSITY)
 import glob
 import traceback
 import time
+from datetime import datetime
 from os import path
 from json import load, dump
 from typing import Optional, Dict, List, Any, Tuple, Union
@@ -17,7 +18,7 @@ from youtubesearchpython import SearchVideos
 
 from core.library import LibraryFile
 from core.scrobble import ExtendedScrobble, TrackSourceType, RawScrobble
-from core.utilities import youtube_length_to_sec, TimedContext
+from core.utilities import youtube_length_to_sec, TimedContext, generate_random_filename_safe_text
 from core.musicbrainz import ReleaseTrack
 from core.genres import fetch_genre_by_metadata
 from core.prevent_sleep import inhibit, uninhibit
@@ -671,10 +672,26 @@ def generate_extended_data(state: AnalysisState):
     retries_current_wait = 2
     written = False
 
+    human_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    workbook_output_path = config.XLSX_OUTPUT_PATH.replace(
+        "{DATETIME}", human_datetime
+    )
+
+    # If the file already exists (which is unlikely, but possible),
+    # append a random suffix to the file name
+    if path.isfile(workbook_output_path):
+        random_suffix: str = generate_random_filename_safe_text(4)
+        log.warning(f"Configured spreadsheet output path is \"{workbook_output_path}\", but that file already exists. "
+                    f"Appending \"_{random_suffix}\" to the filename.")
+        # Tuple[path without extension, ext]
+        split_output: Tuple[str, str] = path.splitext(workbook_output_path)
+
+        workbook_output_path = f"{split_output[0]}_{random_suffix}{split_output[1]}"
+
     # Up to 7 retries (2^7 = 128)
     while retries_current_wait <= 128:
         try:
-            xl_workbook.save(filename=config.XLSX_OUTPUT_PATH)
+            xl_workbook.save(filename=workbook_output_path)
             written = True
             break
         except PermissionError:

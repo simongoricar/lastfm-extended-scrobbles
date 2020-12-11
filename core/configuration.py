@@ -118,8 +118,10 @@ class AnalysisConfig:
         ##########
         # DestinationPaths
         ##########
-        XLSX_OUTPUT_PATH: str = path.abspath(self._table_dest_paths.get("xlsx_ouput_path").format(
-            DATA_DIR=DATA_DIR
+        # using .replace here because .format expects us to format every placeholder
+        # but DATETIME must be formatted at the very moment we're creating a file
+        XLSX_OUTPUT_PATH: str = path.abspath(self._table_dest_paths.get("xlsx_ouput_path").replace(
+            "{DATA_DIR}", DATA_DIR
         ))
         self.XLSX_OUTPUT_PATH: str = XLSX_OUTPUT_PATH
 

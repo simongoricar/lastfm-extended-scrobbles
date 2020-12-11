@@ -15,7 +15,9 @@ music_library_root = ""
 
 [DestinationPaths]
 # Where to store the results
-xlsx_ouput_path = "{DATA_DIR}/output.xlsx"
+# {DATA_DIR} works here as well.
+# An additional placeholder: {DATETIME} is replaced with YYYY-MM-DD_HH-MM-SS
+xlsx_ouput_path = "{DATA_DIR}/output-{DATETIME}.xlsx"
 
 ##
 # Values below are configurable, but should be left alone in most cases.
