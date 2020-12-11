@@ -590,7 +590,7 @@ def process_single_scrobble(
     if scrobble is None:
         log.debug("No match, using basic scrobble data.")
         scrobble = ExtendedScrobble.from_basic_data(rs)
-        state.c_basic_info_hits += 1
+        stats.basic_info_hits += 1
 
     #########
     # Find genre if missing
