@@ -12,7 +12,7 @@ import requests
 import sys
 import getopt
 import json
-from typing import Optional, List
+from typing import Optional, List, Tuple, Dict
 from urllib.parse import urlencode
 
 # Add the base directory as a path for the import
@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from core.configuration import config
 
 logging.basicConfig(level=config.VERBOSITY)
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 # To avoid leaking your api key
 logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
@@ -34,12 +34,13 @@ try:
     if len(sys.argv[1:]) < 1:
         raise getopt.GetoptError("no args")
 
+    opts: List[Tuple[str, str]]
+    args: List[Tuple[str, str]]
     opts, args = getopt.getopt(sys.argv[1:], "u:", "username=")
 
     for opt, arg in opts:
         if opt in ("-u", "--username"):
             username = arg
-
 except getopt.GetoptError:
     # Fall back to interactive
     log.warning("No -u [username]/--username [username] passed, falling back to interactive.")
@@ -71,11 +72,11 @@ page_counter: int = 1
 # Request first page and find the total number of pages
 log.info("Requesting first page.")
 
-first_request = request_page(username, page_counter)
-recenttracks_raw = first_request.get("recenttracks") or {}
+first_request: Dict = request_page(username, page_counter)
+recenttracks_raw: Dict = first_request.get("recenttracks") or {}
 scrobbles_pages.append(recenttracks_raw.get("track") or [])
 
-total_pages = int(recenttracks_raw.get("@attr").get("totalPages"))
+total_pages: int = int(recenttracks_raw.get("@attr").get("totalPages"))
 log.info(f"Total pages: {total_pages}, downloading...")
 
 # Request the rest of the pages
