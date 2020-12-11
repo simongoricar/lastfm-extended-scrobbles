@@ -1,3 +1,9 @@
+1.2
+- Added: exact metadata match (if this one fails, we try partial match as previously)
+- Changed: now using unicode quick ratio for partial matches
+- Fixed: fix crash on missing audio file tags
+- Changed: a bunch of internal optimisations and code cleanup
+
 1.1
 - Added: new column - genre! (data from Last.fm tags using Beets' genre list)
 - Added: new column - track love (data from Last.fm)
