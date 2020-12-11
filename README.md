@@ -46,7 +46,7 @@ Amount of genres to output is configurable via `max_genre_count` in the configur
 If you used Poetry for the install, run the script with `poetry run python analyse.py`. If not, use `python analyse.py`.
 
 The script will first index your music library and then proceed to generate a spreadsheet (xlsx extension) with the extended scrobble information.
-The resulting spreadsheet will be (by default) saved to `data/output.xlsx`.
+The resulting spreadsheet will be (by default) saved to `data/output-timestamp.xlsx`.
 
 ### 2.3. Maintenance and troubleshooting
 If the content of your music library changes (or its path does), you must delete the music library cache at `data/cache/library_cache.json`, otherwise the script will not work properly.
