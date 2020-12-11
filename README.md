@@ -15,36 +15,38 @@ Otherwise, install the dependencies from the generated `requirements.txt` file w
 
 ## 2. Usage
 ### 2.1. Setup
-Before running the script, you need to have a json file with your [Last.fm](https://www.last.fm/) scrobbles. 
+Take an example configuration file at `data/config.EXAMPLE.toml`, copy it to `data/config.toml` and fill out the [Last.fm API key/secret](https://www.last.fm/api/account/create) as well as the scrobbles JSON file (see below) and local music library path. Other settings can be left alone.
+
+Before running the script, you need to have a JSON file with your [Last.fm](https://www.last.fm/) scrobbles. 
 This script can process a list of pages returned by the Last.fm API.
 
-The recommended way to save your scrobbles into a JSON format using the provided script in `data/download-scrobbles.py`. 
+The recommended way to save your scrobbles into a correct JSON format is using the provided script in `data/download-scrobbles.py`. 
 Run it with `python download-scrobbles.py --username myusername` to download your scrobbles into a JSON file in the `data` directory 
 (you'll need to have the configuration file already filled out and the dependencies installed for the script to work).  
 An alternative is the JSON output of a site like [ghan.nl/scrobbles](https://mainstream.ghan.nl/scrobbles.html), 
-but data about your loved tracks will be unavailable this way.
+but the loved tracks column will be always 0 this way.
 
 *lastfm-extended-scrobbles* has multiple modes of search:
 - Local music library lookup via track MBID (extremely fast once indexed)
-- Local music library lookup via track metadata (still very fast)
+- Local music library lookup via track metadata (both exact and fuzzy matching, still very fast)
 - MusicBrainz track MBID lookup (not too bad)
-- YouTube search (slowest, but also only as a fallback if everything else fails)
+- YouTube search (slowest, but also only if previous methods fail)
 - If everything above fails, an entry with just the scrobble data is created (but some columns will be empty)
 
-If first one fails to find a match, the second method is tried, and so on.
-*It is therefore highly recommended that you link your local music library with this script if you have one.*
+If first one fails to find a match, the second method is attempted, and so on.
+*It is therefore highly recommended that you link your local music library (which should be properly tagged) with this script if you have one.* 
 
 Genres are looked up via Last.fm tags and filtered by the huge list of genres provided by [Beets' LastGenre plugin](https://github.com/beetbox/beets).
-Amount of genres to output is configurable via `max_genre_count` in the configuration file. Track genre has the highest priority, then album genre, then finally artist genres.
+Amount of genres to output is configurable via `max_genre_count` in the configuration file, but defaults to 4. Track genre has the highest priority, then album genre, then finally artist genres.
 
-*Important:* Before running, the library location and the scrobbles file location must be filled out and saved into the configuration file at `data/config.toml` 
+*Important tldr:* Before running, the Last.fm API key/secret, music library location and the scrobbles file path must be filled out and saved into the configuration file at `data/config.toml` 
 (use the `data/config.EXAMPLE.toml` file as a template).
 
 ### 2.2. Run the script
 If you used Poetry for the install, run the script with `poetry run python analyse.py`. If not, use `python analyse.py`.
 
 The script will first index your music library and then proceed to generate a spreadsheet (xlsx extension) with the extended scrobble information.
-The resulting spreadsheet will (by default) be saved to `data/output.xlsx`.
+The resulting spreadsheet will be (by default) saved to `data/output.xlsx`.
 
 ### 2.3. Maintenance and troubleshooting
 If the content of your music library changes (or its path does), you must delete the music library cache at `data/cache/library_cache.json`, otherwise the script will not work properly.
@@ -53,15 +55,15 @@ If unexpected errors pop up during the analysis and they aren't caused by someth
 
 
 ## 3. Extended Data
-This tool outputs the original data from the scrobble and extends it with the track length and genre.
+This tool outputs the original data from the scrobble, attempts to improve columns like artist names and track titles. It extends the data with the track length and genre as well via Last.fm tags.
 
 **All columns:**
 - Track source `local music library / MusicBrainz / YouTube`
 - Scrobble time `unix epoch`
-- Artist name and MusicBrainz ID
-- Album title and MusicBrainz ID
-- Track title and MusicBrainz ID
-- Track length `in seconds, with one decimal place for local data`
+- Artist name and MusicBrainz ID `uses scrobbled info unless there's a local library match`
+- Album title and MusicBrainz ID `^`
+- Track title and MusicBrainz ID `^`
+- Track length `in seconds, with one decimal place for local library files`
 - Track love `based on loved tracks from Last.fm`
 - Genre `merged track/album/artist genres, sorted by weight`
 

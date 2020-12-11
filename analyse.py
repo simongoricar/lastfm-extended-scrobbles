@@ -196,6 +196,7 @@ def ensure_library_cache(state: AnalysisState) -> None:
             (AnalysisState's library_cache attribute is updated)
     """
     # Build audio metadata cache if needed (otherwise just load the json cache)
+    # TODO detect changes in music library!
 
     # If a cache already exists, load it
     # TODO switch to ignore cache? (deleting the cache file also works for now)
