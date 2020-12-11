@@ -9,6 +9,7 @@ from fuzzywuzzy.fuzz import UWRatio
 from fuzzywuzzy.process import extractOne
 
 from .configuration import config
+from .state import GenreDataState
 
 log = logging.getLogger(__name__)
 
@@ -99,53 +100,50 @@ def download_genre_data() -> None:
     log.info("Genre data downloaded.")
 
 
-def _load_genre_tree(genre_tree_raw: dict, output_list: List[Genre],
-                     _parent_node: Genre = None, _depth: int = 0) -> None:
-    # TODO this is actually not used yet, make this an option
-    #   (allow for most-specific results)
-    # DEPRECATED the genre tree is unused
+# def _load_genre_tree(genre_tree_raw: dict, output_list: List[Genre],
+#                      _parent_node: Genre = None, _depth: int = 0) -> None:
+#     # TODO this is actually not used yet, make this an option
+#     #   (allow for most-specific results)
+#     # DEPRECATED the genre tree is unused
+#     """
+#     Generate a list of Genre instances.
+#
+#     Args:
+#         genre_tree_raw:
+#             Raw genre tree data.
+#         output_list:
+#             Due to the nature of lists, this is the list of Genre instances will end up in.
+#         _parent_node:
+#             Don't use this directly, it is used for recursion. Contains the parent node for the current subtree.
+#     """
+#     if type(genre_tree_raw) is list:
+#         for element in genre_tree_raw:
+#             # By checking if we're about to reach the end, we should save some time by directly appending
+#             # instead of recursively calling for a simple string
+#             if type(element) is str:
+#                 # This is always a leaf!
+#                 genre_instance = Genre(element, _parent_node, True, _depth)
+#                 output_list.append(genre_instance)
+#             # Otherwise just recursively call with the subtree
+#             elif type(element) is dict:
+#                 _load_genre_tree(element, output_list, _parent_node, _depth)
+#
+#     elif type(genre_tree_raw) is dict:
+#         for sub_tree_key in genre_tree_raw.keys():
+#             # For each key, instantiate a Genre and pass it down the recursion
+#             genre_instance = Genre(sub_tree_key, _parent_node, False, _depth)
+#             output_list.append(genre_instance)
+#
+#             _load_genre_tree(genre_tree_raw[sub_tree_key], output_list, genre_instance, _depth + 1)
+
+
+def load_genre_data(state: GenreDataState) -> None:
     """
-    Generate a list of Genre instances.
+    Load the cached genre data. Updates the GenreDataState instance.
 
     Args:
-        genre_tree_raw:
-            Raw genre tree data.
-        output_list:
-            Due to the nature of lists, this is the list of Genre instances will end up in.
-        _parent_node:
-            Don't use this directly, it is used for recursion. Contains the parent node for the current subtree.
-    """
-    if type(genre_tree_raw) is list:
-        for element in genre_tree_raw:
-            # By checking if we're about to reach the end, we should save some time by directly appending
-            # instead of recursively calling for a simple string
-            if type(element) is str:
-                # This is always a leaf!
-                genre_instance = Genre(element, _parent_node, True, _depth)
-                output_list.append(genre_instance)
-            # Otherwise just recursively call with the subtree
-            elif type(element) is dict:
-                _load_genre_tree(element, output_list, _parent_node, _depth)
-
-    elif type(genre_tree_raw) is dict:
-        for sub_tree_key in genre_tree_raw.keys():
-            # For each key, instantiate a Genre and pass it down the recursion
-            genre_instance = Genre(sub_tree_key, _parent_node, False, _depth)
-            output_list.append(genre_instance)
-
-            _load_genre_tree(genre_tree_raw[sub_tree_key], output_list, genre_instance, _depth + 1)
-
-
-def load_genre_data() -> Tuple[List[str], List[Genre], List[str]]:
-    """
-    Load the cached genre data.
-
-    Returns:
-        A tuple consisting of:
-            - a full genre list (from genres.txt)
-            - a list of Genre instances (from the genres tree)
-            - a list of genres (generated from the genres tree, shorted than the full genre list)
-
+        state:
+            GenreDataState instance.
     """
     log.info("Loading genre data...")
 
@@ -155,32 +153,36 @@ def load_genre_data() -> Tuple[List[str], List[Genre], List[str]]:
     genres_list_ = [a.title() for a in genres_list_]
 
     # DEPRECATED the genre tree is unused
-    with open(BEETS_GENRES_TREE_PATH, "r", encoding="utf8") as genre_tree_f:
-        genres_tree_ = safe_load(genre_tree_f)
+    # with open(BEETS_GENRES_TREE_PATH, "r", encoding="utf8") as genre_tree_f:
+    #     genres_tree_ = safe_load(genre_tree_f)
 
     # Flatten the tree into a dictionary
-    list_of_genre_instances: List[Genre] = []
-    _load_genre_tree(genres_tree_, list_of_genre_instances)
+    # list_of_genre_instances: List[Genre] = []
+    # _load_genre_tree(genres_tree_, list_of_genre_instances)
 
     # Create a quick access list with just genre names as strings
-    list_of_genre_names = [a.name for a in list_of_genre_instances]
+    # list_of_genre_names = [a.name for a in list_of_genre_instances]
 
     log.info("Genre data loaded.")
-    return genres_list_, list_of_genre_instances, list_of_genre_names
+    # return genres_list_, list_of_genre_instances, list_of_genre_names
+    genre_state.full_genre_list = genres_list_
 
 
 # On startup:
 # If needed, download the genres tree & list from beets' GitHub repository
-if not os.path.isfile(BEETS_GENRES_LIST_PATH) or not os.path.isfile(BEETS_GENRES_TREE_PATH):
+if not os.path.isfile(BEETS_GENRES_LIST_PATH):
     download_genre_data()
 
-# Load the genre data globally
-full_genres_list: List[str]
-genres_list: List[Genre]
-genres_name_list: List[str]
-
+# DEPRECATED
+# full_genres_list: List[str]
+# genres_list: List[Genre]
+# genres_name_list: List[str]
 # DEPRECATED the genre tree is unused
-full_genres_list, genres_list, genres_name_list = load_genre_data()
+# full_genres_list, genres_list, genres_name_list = load_genre_data()
+
+# Load the genre data globally
+genre_state: GenreDataState = GenreDataState()
+load_genre_data(genre_state)
 
 ######
 # Caching
@@ -210,12 +212,12 @@ def cache_tag_results(func):
     return wrapper
 
 
-def _get_tag_depth(tag: str) -> int:
-    # DEPRECATED this function was meant for the genre tree system, but is unused
-    if tag not in genres_name_list:
-        return -1
-
-    return genres_list[genres_name_list.index(tag)].tree_depth
+# def _get_tag_depth(tag: str) -> int:
+#     # DEPRECATED this function was meant for the genre tree system, but is unused
+#     if tag not in genres_name_list:
+#         return -1
+#
+#     return genres_list[genres_name_list.index(tag)].tree_depth
 
 
 def _filter_top_tags(tag_list: List[pyl.TopItem]) -> List[str]:
@@ -242,7 +244,7 @@ def _filter_top_tags(tag_list: List[pyl.TopItem]) -> List[str]:
     sorted_tags_str: Set[str] = set([a[0] for a in sorted(merged_tags, key=lambda e: e[1])])
     # Now filter with the genre whitelist
     filtered_tags: List[str] = [
-        tag.title() for tag in list(sorted_tags_str) if tag.title() in full_genres_list
+        tag.title() for tag in list(sorted_tags_str) if tag.title() in genre_state.full_genre_list
     ]
     # Shorten the list to max_genre_count (see config.toml)
     return filtered_tags[:config.MAX_GENRE_COUNT]
@@ -258,11 +260,11 @@ def _parse_lastfm_track_genre(
 
     Args:
         track:
-            pylast Track instance to search for tags on
+            pylast.Track instance to search for tags on
         album:
-            pylast Album instance to search for tags on
+            pylast.Album instance to search for tags on
         artist:
-            pylast Artist instance to search for tags on
+            pylast.Artist instance to search for tags on
 
     Returns:
         List of strings, representing the best choices for genres.
@@ -300,12 +302,12 @@ def _search_page_gen(
 
     Args:
         pylast_search:
-            pylast search object to fetch pages for
+            pylast.*Search object to fetch pages for
         page_limit:
             Hard page limit.
 
     Returns:
-        A generator, returns next page of corresponding pylast results
+        A generator, returns next page (list) of corresponding pylast results
         (pylast.Album for pylast.AlbumSearch, ...) on each yield.
     """
     counter = 0

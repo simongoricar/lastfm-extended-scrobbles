@@ -3,7 +3,7 @@ from typing import Union, Optional
 from mutagen import FileType
 
 from .utilities import get_mutagen_attribute
-from .genres import full_genres_list
+from .genres import genre_state
 
 
 class LibraryFile:
@@ -51,7 +51,7 @@ class LibraryFile:
 
         genres_raw = get_mutagen_attribute(file, "genre")
         genres = [
-            a.strip(" ").title() for a in genres_raw.split(",") if a.strip(" ").title() in full_genres_list
+            a.strip(" ").title() for a in genres_raw.split(",") if a.strip(" ").title() in genre_state.full_genre_list
         ] if genres_raw is not None else None
 
         return cls(

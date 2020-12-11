@@ -7,7 +7,7 @@ import traceback
 import time
 from os import path
 from json import load, dump
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any, Tuple, Union
 
 from mutagen import File, FileType, MutagenError
 from openpyxl import Workbook
@@ -21,16 +21,34 @@ from core.utilities import youtube_length_to_sec, TimedContext
 from core.musicbrainz import ReleaseTrack
 from core.genres import fetch_genre_by_metadata
 from core.prevent_sleep import inhibit, uninhibit
-from core.state import State, LibraryCacheState, SearchCacheState, StatisticsState, AnalysisState
+from core.state import LibraryCacheState, SearchCacheState, StatisticsState, AnalysisState
 
 log = logging.getLogger(__name__)
+
+
+TypeRawLibraryCache = Dict[
+    str,
+    Union[
+        Dict[str, List[LibraryFile]],
+        Dict[str, LibraryFile]
+    ]
+]
 
 
 ##
 # Cache the music library
 ##
 def find_music_library_files(root_dir: str) -> List[str]:
-    # Recursively build a list of audio files
+    """
+    Given a root directory, build a list of audio file paths.
+
+    Args:
+        root_dir:
+            Root directory to start in. Includes subdirectories.
+
+    Returns:
+        A list of strings contaning audio file paths.
+    """
     globs: List[str] = [
         path.join(root_dir, f"**/*.{ext_glob}")
         for ext_glob in ("mp3", "ogg", "wav", "flac", "m4a")
@@ -44,7 +62,7 @@ def find_music_library_files(root_dir: str) -> List[str]:
     return files
 
 
-def build_library_metadata_cache(file_list: List[str]):
+def build_library_metadata_cache(file_list: List[str]) -> TypeRawLibraryCache:
     by_album: Dict[str, List[LibraryFile]] = {}
     by_artist: Dict[str, List[LibraryFile]] = {}
     by_track_title: Dict[str, List[LibraryFile]] = {}
@@ -58,6 +76,9 @@ def build_library_metadata_cache(file_list: List[str]):
     for audio_file in file_list:
         # Load file metadata
         try:
+            # TODO this currently supports mutagen easy tags, so pretty much only MP3 and MP4 are guaranteed
+            #   Look into support for non-easy mutagen tags
+            #   (seems like we might only need to map each type's tags with something like a dict?)
             mutagen_file: Optional[FileType] = File(audio_file, easy=True)
         except MutagenError:
             # Failed to load the file, skip it
@@ -97,6 +118,8 @@ def build_library_metadata_cache(file_list: List[str]):
         if counter % config.CACHE_LOG_INTERVAL == 0:
             log.info(f"Caching progress: {counter} files")
 
+    log.info(f"Processed {files_successful} audio files ({files_failed} failed).")
+
     return {
         "cache_by_album": by_album,
         "cache_by_artist": by_artist,
@@ -105,7 +128,14 @@ def build_library_metadata_cache(file_list: List[str]):
     }
 
 
-def load_library_metadata():
+def load_library_metadata() -> TypeRawLibraryCache:
+    """
+    Loads the cached version of the music library. The cache is saved in the configurable cache directory.
+    Recreates LibraryFile instances from the data.
+
+    Returns:
+        A
+    """
     with open(config.LIBRARY_CACHE_FILE, "r", encoding="utf8") as lib_file:
         raw = load(lib_file)
 
@@ -128,22 +158,22 @@ def load_library_metadata():
     }
 
 
-def save_library_metadata(raw: Dict[str, Dict[str, Any]]):
-    def serialize_libraryfiles_list(full: Dict[str, List[LibraryFile]]):
+def save_library_metadata(raw_cache: TypeRawLibraryCache) -> None:
+    def serialize_libraryfiles_list(full: Dict[str, List[LibraryFile]]) -> Dict[str, List[str]]:
         return {
             k: [lib_f.dump() for lib_f in v] for k, v in full.items()
         }
 
-    def serialize_libraryfiles_single(full: Dict[str, LibraryFile]):
+    def serialize_libraryfiles_single(full: Dict[str, LibraryFile]) -> Dict[str, str]:
         return {
             k: v.dump() for k, v in full.items()
         }
 
     dumped = {
-        "cache_by_album": serialize_libraryfiles_list(raw["cache_by_album"]),
-        "cache_by_artist": serialize_libraryfiles_list(raw["cache_by_artist"]),
-        "cache_by_track_title": serialize_libraryfiles_list(raw["cache_by_track_title"]),
-        "cache_by_track_mbid": serialize_libraryfiles_single(raw["cache_by_track_mbid"]),
+        "cache_by_album": serialize_libraryfiles_list(raw_cache["cache_by_album"]),
+        "cache_by_artist": serialize_libraryfiles_list(raw_cache["cache_by_artist"]),
+        "cache_by_track_title": serialize_libraryfiles_list(raw_cache["cache_by_track_title"]),
+        "cache_by_track_mbid": serialize_libraryfiles_single(raw_cache["cache_by_track_mbid"]),
     }
 
     with open(config.LIBRARY_CACHE_FILE, "w", encoding="utf8") as lib_file:
@@ -154,14 +184,16 @@ def save_library_metadata(raw: Dict[str, Dict[str, Any]]):
         )
 
 
-def ensure_library_cache(state: AnalysisState):
+def ensure_library_cache(state: AnalysisState) -> None:
     """
     Makes sure the music library cache exists.
     Generates one if needed, otherwise loads from file.
+    Updates passed state with the music library cache.
 
     Args:
         state:
-            AnalysisState instance to which to save the LocalLibraryCache instance.
+            AnalysisState instance into which to save the new LocalLibraryCache instance.
+            (AnalysisState's library_cache attribute is updated)
     """
     # Build audio metadata cache if needed (otherwise just load the json cache)
 
@@ -172,6 +204,7 @@ def ensure_library_cache(state: AnalysisState):
         raw_cache = load_library_metadata()
         log.info("Local music library cache loaded.")
     elif config.LIBRARY_CACHE_FILE not in (None, ""):
+        log.info("No cache found, generating.")
         log.info("Collecting audio files...")
         file_list: List[str] = find_music_library_files(config.MUSIC_LIBRARY_ROOT)
         log.info(f"Collected {len(file_list)} audio files.")
@@ -190,24 +223,23 @@ def ensure_library_cache(state: AnalysisState):
     library_state: LibraryCacheState = LibraryCacheState()
     library_state.set_from_raw_cache(raw_cache)
 
+    # Update the AnalysisState's library_cache ref and we're done here!
     state.library_cache = library_state
 
 
 ##
 # Scrobbles
 ##
-def load_scrobbles(state: AnalysisState):
+def load_scrobbles(state: AnalysisState) -> None:
     """
     Load the scrobbles file into JSON and flatten it.
+    Updates state with the loaded scrobble data.
 
     Args:
         state:
-            State instance to save the scrobbles into.
-            Keys:
-                - scrobbles (type: List[Dict[Any, Any]])
+            AnalysisState instance to save the scrobbles into.
+            (AnalysisState's scrobbles attribute is updated)
     """
-    log.info("[STEP 2] Loading scrobbles file...")
-
     def load_and_flatten(json_file_path: str) -> List:
         with open(json_file_path, "r", encoding="utf8") as scrobbles_file:
             scrobbles_raw = load(scrobbles_file)
@@ -220,6 +252,7 @@ def load_scrobbles(state: AnalysisState):
     # Flatten and save into state
     scrobbles = load_and_flatten(config.SCROBBLES_JSON_PATH)
     state.raw_scrobbles = scrobbles
+
     log.info(f"{len(scrobbles)} scrobbles loaded.")
 
 
@@ -229,6 +262,18 @@ def load_scrobbles(state: AnalysisState):
 
 # Define search functions
 def find_by_mbid(library_cache: LibraryCacheState, raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
+    """
+    Try to find exact MusicBrainz track ID match in our local music library.
+
+    Args:
+        library_cache:
+            LibraryCacheState instance.
+        raw_scrobble:
+            RawScrobble instance.
+
+    Returns:
+        If found, an ExtendedScrobble instance formed from the matched library track. Otherwise None.
+    """
     library_track = library_cache.cache_by_track_mbid.get(raw_scrobble.track_mbid)
 
     if library_track is None:
@@ -240,9 +285,22 @@ def find_by_mbid(library_cache: LibraryCacheState, raw_scrobble: RawScrobble) ->
 def find_by_metadata_full_match(
         library_cache: LibraryCacheState, raw_scrobble: RawScrobble
 ) -> Optional[ExtendedScrobble]:
+    """
+    Try to find exact metadata match in our local music library.
+
+    Args:
+        library_cache:
+            LibraryCacheState instance.
+        raw_scrobble:
+            RawScrobble instance.
+
+    Returns:
+        If found, an ExtendedScrobble instance formed from the matched library track. Otherwise None.
+    """
     if raw_scrobble.track_title in library_cache.cache_by_track_title:
-        # TODO mix exact and partial match?
+        # TODO add mixed exact and partial match?
         #   (e.g. exact title and artist match, then partial album)
+        #   Maybe separate the track, album and artist stages?
         # First, match by track title, then filter by artist and album if possible
         track_matches: List[LibraryFile] = library_cache.cache_by_track_title[raw_scrobble.track_title]
 
@@ -253,7 +311,7 @@ def find_by_metadata_full_match(
                 raw_scrobble, track_matches[0], TrackSourceType.LOCAL_LIBRARY_METADATA_EXACT
             )
 
-        # First: by artist
+        # Then: by artist
         track_matches = [m for m in track_matches if m.artist_name == raw_scrobble.artist_name]
 
         if len(track_matches) < 1:
@@ -263,7 +321,7 @@ def find_by_metadata_full_match(
                 raw_scrobble, track_matches[0], TrackSourceType.LOCAL_LIBRARY_METADATA_EXACT
             )
 
-        # Then: by album
+        # Lastly: by album
         track_matches = [m for m in track_matches if m.album_name == raw_scrobble.album_title]
 
         if len(track_matches) < 1:
@@ -274,8 +332,11 @@ def find_by_metadata_full_match(
             )
         else:
             # Still multiple matches
+            # TODO should this even return None?
+            #   Multiple matches would indicate duplicate files, so I'm not sure this should even return None,
+            #   maybe just return the first match?
             log.warning(f"Multiple matches when trying full metadata match, returning None. "
-                        f"(\"{raw_scrobble}\" fully matches: {track_matches})")
+                        f"(\"{raw_scrobble}\" fully matches these tracks: {track_matches})")
             return None
 
     return None
@@ -286,10 +347,24 @@ def find_by_metadata_partial_match(
         library_cache: LibraryCacheState,
         raw_scrobble: RawScrobble
 ) -> Optional[ExtendedScrobble]:
+    """
+    Try to find partial metadata match in our local music library.
+
+    Args:
+        search_cache:
+            SearchCacheState instance.
+        library_cache:
+            LibraryCacheState instance.
+        raw_scrobble:
+            RawScrobble instance.
+
+    Returns:
+        If found, an ExtendedScrobble instance formed from the matched library track. Otherwise None.
+    """
     # Use cached result if possible
     caching_tuple = (raw_scrobble.track_title, raw_scrobble.album_title, raw_scrobble.artist_name)
     if caching_tuple in search_cache.local_by_partial_metadata:
-        log.debug("_find_by_metadata_partial_match: cache hit")
+        log.debug("find_by_metadata_partial_match: cache hit")
         track: Optional[LibraryFile] = search_cache.local_by_partial_metadata[caching_tuple]
 
         if track is None:
@@ -299,7 +374,7 @@ def find_by_metadata_partial_match(
                 raw_scrobble, track, TrackSourceType.LOCAL_LIBRARY_METADATA_PARTIAL
             )
 
-    log.debug("_find_by_metadata_partial_match: cache miss")
+    log.debug("find_by_metadata_partial_match: cache miss")
     # Start by filtering to the closest artist name match
     best_artist_match: Optional[Tuple[str, int]] = extractOne(
         raw_scrobble.artist_name,
@@ -353,6 +428,16 @@ def find_by_metadata_partial_match(
 
 
 def find_on_musicbrainz(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]:
+    """
+    Try to find a track MBID match on MusicBrainz.
+
+    Args:
+        raw_scrobble:
+            RawScrobble instance.
+
+    Returns:
+        If found, an ExtendedScrobble instance formed with the help of MusicBrainz' data.
+    """
     release_track = ReleaseTrack.from_track_mbid(raw_scrobble.track_mbid)
     if release_track is None:
         return None
@@ -362,16 +447,30 @@ def find_on_musicbrainz(raw_scrobble: RawScrobble) -> Optional[ExtendedScrobble]
 
 
 def find_on_youtube(
-        cache_state: SearchCacheState,
+        search_cache: SearchCacheState,
         raw_scrobble: RawScrobble
 ) -> Optional[ExtendedScrobble]:
+    """
+    Try to find a track by metadata on YouTube. Works simply by searching for the string
+    "artist album track" and trying to find the best match out of the first 8 results.
+
+    Args:
+        search_cache:
+            SearchCacheState instance.
+        raw_scrobble:
+            RawScrobble instance.
+
+    Returns:
+        If found, an ExtendedScrobble instance with the length from the matched YouTube video.
+    """
     # Search YouTube for the closest "artist title" match
     query = f"{raw_scrobble.artist_name} {raw_scrobble.album_title} {raw_scrobble.track_title}"
 
-    if query in cache_state.youtube_by_query:
-        log.debug("YouTube: using cached search")
-        duration_sec = cache_state.youtube_by_query[query]
+    if query in search_cache.youtube_by_query:
+        log.debug("find_on_youtube: cache hit")
+        duration_sec = search_cache.youtube_by_query[query]
     else:
+        log.debug("find_on_youtube: cache miss")
         search = SearchVideos(query, mode="list", max_results=8)
 
         # Find the closest match
@@ -383,17 +482,18 @@ def find_on_youtube(
         )
 
         if closest_match is None:
-            log.debug("YouTube: no hit")
+            log.debug("find_on_youtube: no good match")
             return None
         else:
-            log.debug("YouTube: got a hit")
+            log.debug(f"find_on_youtube: got a good match - \"{closest_match[0]}\"")
 
         # Parse the closest one into a proper ExtendedScrobble
         index = search.titles.index(closest_match[0])
         duration_human = search.durations[index]
         duration_sec = youtube_length_to_sec(duration_human)
 
-        cache_state.youtube_by_query[query] = duration_sec
+        # Store the video length in cache to speed up repeated listens
+        search_cache.youtube_by_query[query] = duration_sec
 
     return ExtendedScrobble.from_youtube(raw_scrobble, duration_sec)
 
@@ -402,6 +502,25 @@ def process_single_scrobble(
         state: AnalysisState,
         raw_data: Dict[Any, Any]
 ) -> ExtendedScrobble:
+    """
+    Given raw data about a scrobble event, process it and attempt to find more data about it.
+    Queries the local music library, YouTube, MusicBrainz and Last.fm if needed.
+
+    Args:
+        state:
+            AnalysisState instance.
+        raw_data:
+            A dictionary with the raw scrobble data.
+
+    Returns:
+        An ExtendedScrobble instance. Contains as much data as can be extracted from it.
+
+        Modes of search:
+            1) Use track MBID (local library)
+            2) Use track metadata (local library) - try exact match first, then partial
+            3) Use track MBID (search on MusicBrainz)
+            4) Use track metadata (YouTube search)
+    """
     ####
     # Load raw scrobble data into a RawScroble instance
     ####
@@ -417,16 +536,16 @@ def process_single_scrobble(
     stats: StatisticsState = state.statistics
 
     #########
-    # STEP 1: Find source
+    # Find source with track length and more accurate metadata
     #########
     # Multiple modes of search, first has highest priority:
     # 1) Use track MBID (local library)
     # 2) Use track metadata (local library) - try exact match first, then partial
     # 3) Use track MBID (search on MusicBrainz)
-    # 3) Use track metadata (YouTube search)
+    # 4) Use track metadata (YouTube search)
     scrobble: Optional[ExtendedScrobble] = None
 
-    # Try local track mbid search
+    # Try exact mbid search (local library)
     if rs.track_mbid is not None:
         # Look up the track in cache via mbid
         scrobble = find_by_mbid(library_cache, rs)
@@ -474,7 +593,7 @@ def process_single_scrobble(
         state.c_basic_info_hits += 1
 
     #########
-    # STEP 2: Find genre if needed
+    # Find genre if missing
     #########
     if scrobble.genre_list is None:
         log.debug("Fetching Last.fm genres.")
@@ -535,7 +654,7 @@ def generate_extended_data(state: AnalysisState):
             extended_scrobble: ExtendedScrobble = process_single_scrobble(state, scrobble_raw_data)
         except Exception as e:
             # In case of failure, just log and skip the scrobble
-            log.warning(f"Failed to process scrobble ({e}): \"{scrobble_raw_data}\"")
+            log.warning(f"Failed to process scrobble, skipping ({e}): \"{scrobble_raw_data}\"")
             traceback.print_exc()
         else:
             sheet.append(extended_scrobble.to_spreadsheet_list())
@@ -571,11 +690,11 @@ def generate_extended_data(state: AnalysisState):
 
 def print_end_stats(state: AnalysisState):
     """
-    Log the analysis stats, based on the passed State.
+    Log the analysis stats, based on the current state.
 
     Args:
         state:
-            State instance to use.
+            AnalysisState instance to use.
             Expects the "scrobbles" and "statistics" keys to be accurate.
     """
     scrobbles_len = len(state.raw_scrobbles)
@@ -607,7 +726,14 @@ def print_end_stats(state: AnalysisState):
 
 def main():
     """
-    Main entry point
+    Main entry point for this script.
+
+    Steps:
+        1) If on Windows, makes sure the system won't go to sleep mid-processing
+        2) Builds or loads the local music library cache
+        3) Loads the scrobbles from file
+        4) Generates the extended data and outputs it to a spreadsheet
+        5) Shows some quick stats about the quality of lookups
     """
     # Inhibit Windows system sleep, and uninhibit at the end of the script
     # Silently fails on anything but Windows
@@ -624,11 +750,13 @@ def main():
 
     # Will fill the state in-place, as will functions down the line
     with TimedContext("Local library cache took {time}s", callback=log.info):
+        log.info("Making sure the local music library is cached...")
         ensure_library_cache(state)
 
     ##
     # Scrobbles
     with TimedContext("Scrobbles file read and parsed in {time}s", callback=log.info):
+        log.info("Loading scrobbles...")
         load_scrobbles(state)
 
     ##

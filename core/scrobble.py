@@ -79,8 +79,8 @@ class RawScrobble:
         )
 
     def __str__(self):
-        return f"<RawScrobble artist=\"{self.artist_name}\" album=\"{self.album_title}\" " \
-               f"track=\"{self.track_title}\" track_mbid=\"{self.track_mbid}\">"
+        return f"<RawScrobble artist_name=\"{self.artist_name}\" album_title=\"{self.album_title}\" " \
+               f"track_title=\"{self.track_title}\" track_mbid=\"{self.track_mbid}\">"
 
 
 class ExtendedScrobble:
@@ -166,7 +166,7 @@ class ExtendedScrobble:
             track:
 
         Returns:
-
+            ExtendedScrobble constructed using scrobble data + MusicBrainz track data.
         """
         # Use length from ReleaseTrack
         track_length = track.track_length
@@ -201,7 +201,7 @@ class ExtendedScrobble:
                 YouTube video duration in seconds.
 
         Returns:
-            ExtendedScrobble instance constructed using scrobble data + YouTube data.
+            ExtendedScrobble instance constructed using scrobble data + YouTube video length.
         """
         # Use length from the video
         track_length = video_duration
@@ -234,7 +234,7 @@ class ExtendedScrobble:
                 Raw scrobble dict (one entry) as exported from last.fm.
 
         Returns:
-            ExtendedScrobble instance constructed only RawScrobble data.
+            ExtendedScrobble instance constructed only RawScrobble data. Track length and genre will be missing.
         """
         return cls(
             track_source=TrackSourceType.JUST_SCROBBLE,

@@ -29,9 +29,9 @@ class ReleaseTrack:
     }
 
     def __init__(self, **kwargs):
+        # .pop for required kwargs, .get for optional
         self.track_title = kwargs.pop("track_title")
         self.track_mbid = kwargs.pop("track_mbid")
-        # .pop for required kwargs, .get for optional
         self.track_length = kwargs.get("track_length")
 
         self.album_title = kwargs.pop("album_title")

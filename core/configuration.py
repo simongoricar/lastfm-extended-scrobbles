@@ -29,6 +29,9 @@ logging_name_to_level = {
 
 
 class TOMLConfig:
+    """
+    General-purpose toml config class.
+    """
     __slots__ = ("data", )
 
     def __init__(self, json_data: dict):
@@ -62,6 +65,9 @@ class TOMLConfig:
 
 
 class AnalysisConfig:
+    """
+    Parses and contains all the supported configuration values.
+    """
     __slots__ = (
         "_config",
         "_table_authentication", "_table_source_paths", "_table_dest_paths",
@@ -169,9 +175,8 @@ class AnalysisConfig:
 raw_config = TOMLConfig.from_filename(CONFIG_FILE)
 config = AnalysisConfig(raw_config)
 
-pyproject_config = TOMLConfig.from_filename(PYPROJECT_FILE)
-
-pyproject_tool_poetry = pyproject_config.get_table("tool").get_table("poetry")
+config_pyproject = TOMLConfig.from_filename(PYPROJECT_FILE)
+pyproject_tool_poetry = config_pyproject.get_table("tool").get_table("poetry")
 
 PROJECT_NAME = pyproject_tool_poetry.get("name")
 VERSION = pyproject_tool_poetry.get("version")

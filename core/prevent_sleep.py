@@ -7,6 +7,7 @@ import ctypes
 log = logging.getLogger(__name__)
 
 ctypes_windll = None
+# noinspection PyBroadException
 try:
     ctypes_windll = ctypes.windll.kernel32
     log.info("Detected Windows, will keep the system awake during processing.")

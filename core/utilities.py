@@ -4,7 +4,19 @@ from typing import Any, Dict, Optional, Tuple, Callable
 from mutagen import FileType
 
 
-def get_mutagen_attribute(file: FileType, tag_name: str, fallback: Any = None) -> str:
+def get_mutagen_attribute(file: FileType, tag_name: str, fallback: Any = None) -> Optional[str]:
+    """
+    Args:
+        file:
+            Mutagen FileType instance from which to extract the tag value.
+        tag_name:
+            Tag name to get.
+        fallback:
+            What to return on empty tag (defaults to None).
+
+    Returns:
+         Mutagen tag value (str).
+    """
     if file.tags is None:
         return fallback
 
@@ -17,6 +29,16 @@ def get_mutagen_attribute(file: FileType, tag_name: str, fallback: Any = None) -
 
 
 def youtube_length_to_sec(human_time: str) -> int:
+    """
+    Converts human-readable YouTube length (6:56) to a machine-friendly (416) number of seconds.
+
+    Args:
+        human_time:
+            String containing the human-readable YouTube length.
+
+    Returns:
+        Number of seconds.
+    """
     total = 0
     separated = human_time.split(":")
 
@@ -27,6 +49,7 @@ def youtube_length_to_sec(human_time: str) -> int:
 
     total += separated[-1]
 
+    # TODO revisit this, it might not be the best way
     if len(separated) > 1:
         total += int(separated[-2]) * 60
     if len(separated) > 2:

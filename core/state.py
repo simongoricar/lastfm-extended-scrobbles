@@ -1,23 +1,10 @@
-from typing import Dict, List, Union, Tuple, Any, Optional
+from typing import Dict, List, Union, Tuple, Any, Optional, TYPE_CHECKING
 
-from .library import LibraryFile
-
-
-# class SingletonByName(type):
-#     _by_name: Dict[str, "State"] = {}
-#
-#     def __call__(cls, name: str, *args, **kwargs):
-#         if name in cls._by_name:
-#             # Return existing instance
-#             return cls._by_name[name]
-#         else:
-#             # Make new instance
-#             instance = super(SingletonByName, cls).__call__(name, *args, **kwargs)
-#             cls._by_name[name] = instance
-#             return instance
+# Avoiding circular imports for the win
+if TYPE_CHECKING:
+    from .library import LibraryFile
 
 
-# class State(dict, metaclass=SingletonByName):
 class State(dict):
     """
     A singleton-by-name dict-like state. First argument is the state name.
@@ -29,7 +16,7 @@ class State(dict):
 
     This is usually subclassed, see LibraryCacheState for an example.
     """
-#    def __init__(self, _name: str, *args, **kwargs):
+    # TODO support for seralizing this into json (for caching over restarts, for example)
     def __init__(self, *args, **kwargs):
         super(State, self).__init__(*args, **kwargs)
 
@@ -60,10 +47,10 @@ class LibraryCacheState(State):
     def __init__(self):
         super(LibraryCacheState, self).__init__()
 
-        self.cache_by_album: Dict[str, List[LibraryFile]] = {}
-        self.cache_by_artist: Dict[str, List[LibraryFile]] = {}
-        self.cache_by_track_title: Dict[str, List[LibraryFile]] = {}
-        self.cache_by_track_mbid: Dict[str, LibraryFile] = {}
+        self.cache_by_album: Dict[str, List["LibraryFile"]] = {}
+        self.cache_by_artist: Dict[str, List["LibraryFile"]] = {}
+        self.cache_by_track_title: Dict[str, List["LibraryFile"]] = {}
+        self.cache_by_track_mbid: Dict[str, "LibraryFile"] = {}
 
         self.cache_list_of_albums: List[str] = []
         self.cache_list_of_artists: List[str] = []
@@ -75,8 +62,8 @@ class LibraryCacheState(State):
             raw_cache: Dict[
                 str,
                 Union[
-                    Dict[str, List[LibraryFile]],
-                    Dict[str, LibraryFile]
+                    Dict[str, List["LibraryFile"]],
+                    Dict[str, "LibraryFile"]
                 ]
             ]
     ):
@@ -114,7 +101,7 @@ class SearchCacheState(State):
         super(SearchCacheState, self).__init__()
 
         self.youtube_by_query: Dict[str, int] = {}
-        self.local_by_partial_metadata: Dict[Tuple[str, str, str], Optional[LibraryFile]] = {}
+        self.local_by_partial_metadata: Dict[Tuple[str, str, str], Optional["LibraryFile"]] = {}
 
 
 class StatisticsState(State):
@@ -145,7 +132,6 @@ class AnalysisState(State):
     """
     "Main" state, contains general information.
     """
-    # TODO
     __slots__ = (
         "library_cache",
         "search_cache",
@@ -160,3 +146,18 @@ class AnalysisState(State):
         self.search_cache: Optional[SearchCacheState] = None
         self.raw_scrobbles: List[Dict[Any, Any]] = []
         self.statistics: Optional[StatisticsState] = None
+
+
+class GenreDataState(State):
+    """
+    Contains the state about genres, used in core/genres.py
+    """
+    __slots__ = (
+        "full_genre_list",
+        # TODO this doesn't contain the genre tree as it's not yet complete
+    )
+
+    def __init__(self):
+        super(GenreDataState, self).__init__()
+
+        self.full_genre_list: List[str] = []
