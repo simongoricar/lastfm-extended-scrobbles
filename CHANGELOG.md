@@ -1,3 +1,7 @@
+1.2.1
+- Changed: minor logging improvements
+- Changed: better Python typing
+
 1.2
 - Added: exact metadata match (if this one fails, we try partial match as previously)
 - Changed: improved output file naming (timestamped name, adds a random suffix if about to overwrite)
