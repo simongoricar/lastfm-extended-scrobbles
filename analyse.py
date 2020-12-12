@@ -81,9 +81,10 @@ def build_library_metadata_cache(file_list: List[str]) -> TypeRawLibraryCache:
             #   Look into support for non-easy mutagen tags
             #   (seems like we might only need to map each type's tags with something like a dict?)
             mutagen_file: Optional[FileType] = File(audio_file, easy=True)
-        except MutagenError:
+        except MutagenError as e:
             # Failed to load the file, skip it
-            log.warning(f"Failed to load audio file: \"{audio_file}\"")
+            log.warning(f"Failed to load audio file ({e}): \"{audio_file}\"")
+            traceback.print_exc()
             files_failed += 1
             continue
         else:
