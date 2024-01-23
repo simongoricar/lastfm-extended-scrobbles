@@ -1,0 +1,7 @@
+[submodule "euphony"]
+	path = euphony
+	url = git@github.com:simongoricar/euphony.git
+	branch = master
+[submodule "inversion-list"]
+	path = inversion-list
+	url = git@github.com:simongoricar/inversion-list.git

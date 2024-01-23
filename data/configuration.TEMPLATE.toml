@@ -1,0 +1,28 @@
+######
+# Logging
+######
+[logging]
+# The console log output level.
+# This value can be overriden with the RUST_LOG environment variable.
+# 
+# For more details about setting up this logging level and a guide on more granular settings, 
+# see <https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>).
+console_output_level_filter = "debug,hyper=info,reqwest::connect=info"
+# The log file output level.
+# This value is not overriden by the RUST_LOG environment variable.
+# 
+# For more details about setting up this logging level and a guide on more granular settings, 
+# see <https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>).
+log_file_output_level_filter = "info,hyper=info,reqwest::connect=info"
+
+# Log file output directory.
+log_file_output_directory = "./logs/"
+
+
+
+######
+# last.fm
+######
+[last_fm]
+# The last.fm API key can be obtained here: https://www.last.fm/api
+api_key = ""

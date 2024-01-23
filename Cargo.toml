@@ -5,4 +5,34 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = ["cancellation-token"]
+
 [dependencies]
+euphony_configuration = { path = "./euphony/euphony_configuration" }
+euphony_library = { path = "./euphony/euphony_library" }
+
+cancellation-token = { path = "./cancellation-token" }
+inversion-list = { path = "./inversion-list" }
+fs-more = "0.3.0"
+
+ratatui = "0.25.0"
+
+clap = { version = "4.4.7", features = ["derive"] }
+miette = { version = "5.10.0", features = ["fancy"] }
+serde = { version = "1.0.189", features = ["derive"] }
+toml = "0.8.4"
+thiserror = "1.0.50"
+tracing = "0.1.40"
+tracing-appender = "0.2.2"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+reqwest = { version = "0.11.23", features = ["json"] }
+tokio = { version = "1.35.1", features = ["full", "rt-multi-thread"] }
+url = { version = "2.4.1", features = ["serde"] }
+chrono = "0.4.31"
+serde_with = { version = "3.4.0", features = ["chrono_0_4"]}
+serde_json = "1.0.108"
+deunicode = "1.4.2"
+memmap2 = "0.9.3"
+futures = "0.3.30"
+# sqlx = { version = "0.7", features = [ "runtime-tokio", "sqlite", "chrono" ] }
